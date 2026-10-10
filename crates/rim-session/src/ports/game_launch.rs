@@ -13,7 +13,36 @@ use crate::game_launch::{LaunchRouteKind, LaunchUnavailable};
 /// RimWorld's 64-bit Windows executable, in the install's root folder.
 pub const RIMWORLD_EXECUTABLE: &str = "RimWorldWin64.exe";
 
-/// The one executable a launch may start: `<game_dir>/RimWorldWin64.exe`.
+/// Executable names Rimmerge may start from a RimWorld install.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameExecutableName {
+    /// Native Linux player executable.
+    Linux,
+    /// Native Linux 64-bit player executable.
+    LinuxX86_64,
+    /// Windows player executable, including Proton/Wine installs.
+    Windows,
+}
+
+impl GameExecutableName {
+    /// The filename shipped by RimWorld for this executable kind.
+    #[must_use]
+    pub const fn filename(self) -> &'static str {
+        match self {
+            Self::Linux => "RimWorldLinux",
+            Self::LinuxX86_64 => "RimWorldLinux.x86_64",
+            Self::Windows => RIMWORLD_EXECUTABLE,
+        }
+    }
+
+    /// Whether this candidate requires Unix executable permissions.
+    #[must_use]
+    pub const fn requires_executable_bit(self) -> bool {
+        !matches!(self, Self::Windows)
+    }
+}
+
+/// The one executable a launch may start, derived from the install directory.
 ///
 /// The field is private and [`Self::of_install`] is the only constructor,
 /// so a launch route can never name any other program.
@@ -27,8 +56,14 @@ impl GameExecutable {
     /// adapter's check.
     #[must_use]
     pub fn of_install(game_dir: &Path) -> Self {
+        Self::of_install_named(game_dir, GameExecutableName::Windows)
+    }
+
+    /// Builds an executable for one of the known RimWorld player names.
+    #[must_use]
+    pub fn of_install_named(game_dir: &Path, name: GameExecutableName) -> Self {
         Self {
-            path: game_dir.join(RIMWORLD_EXECUTABLE),
+            path: game_dir.join(name.filename()),
         }
     }
 
@@ -86,8 +121,8 @@ pub enum LaunchFailure {
     /// registered).
     #[error("Steam did not accept the launch request: {0}")]
     SteamRefused(String),
-    /// Spawning `RimWorldWin64.exe` failed (access denied, bad image, ...).
-    #[error("could not start RimWorldWin64.exe: {0}")]
+    /// Spawning the selected RimWorld executable failed.
+    #[error("could not start the RimWorld executable: {0}")]
     SpawnFailed(String),
 }
 
@@ -102,6 +137,20 @@ mod tests {
         let executable = GameExecutable::of_install(&game_dir);
 
         assert_eq!(executable.path(), game_dir.join("RimWorldWin64.exe"));
+    }
+
+    #[test]
+    fn known_executable_names_are_derived_from_the_install() {
+        let game_dir = Path::new("some").join("install");
+
+        assert_eq!(
+            GameExecutable::of_install_named(&game_dir, GameExecutableName::Linux).path(),
+            game_dir.join("RimWorldLinux")
+        );
+        assert_eq!(
+            GameExecutable::of_install_named(&game_dir, GameExecutableName::LinuxX86_64).path(),
+            game_dir.join("RimWorldLinux.x86_64")
+        );
     }
 
     #[test]

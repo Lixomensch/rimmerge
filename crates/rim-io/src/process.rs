@@ -5,16 +5,22 @@
 
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
-/// The process name RimWorld's 64-bit Windows build runs under.
-pub(crate) const RIMWORLD_PROCESS_NAME: &str = "rimworldwin64.exe";
+/// Process names used by native Linux, Linux x86_64 and Windows/Proton builds.
+pub(crate) const RIMWORLD_PROCESS_NAMES: &[&str] =
+    &["rimworldlinux", "rimworldlinux.x86_64", "rimworldwin64.exe"];
+
+fn is_rimworld_process_name(name: &str) -> bool {
+    RIMWORLD_PROCESS_NAMES
+        .iter()
+        .any(|candidate| name.eq_ignore_ascii_case(candidate))
+}
 
 /// Probes whether RimWorld's own process is currently running. A trait
 /// (not a bare function) so `apply`'s refusal path is testable with a
 /// fake that returns a fixed answer, without touching the real process
 /// list.
 pub trait GameProcessProbe: Send + Sync {
-    /// Whether a process named [`RIMWORLD_PROCESS_NAME`]
-    /// (case-insensitive) currently exists.
+    /// Whether a supported RimWorld process name (case-insensitive) exists.
     fn is_running(&self) -> bool;
 }
 
@@ -42,12 +48,10 @@ impl GameProcessProbe for SysinfoGameProcessProbe {
             true,
             ProcessRefreshKind::nothing(),
         );
-        system.processes().values().any(|process| {
-            process
-                .name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(RIMWORLD_PROCESS_NAME)
-        })
+        system
+            .processes()
+            .values()
+            .any(|process| is_rimworld_process_name(process.name().to_string_lossy().as_ref()))
     }
 }
 
@@ -67,6 +71,14 @@ mod tests {
     fn fixed_probe_reports_the_configured_value() {
         assert!(FixedProbe(true).is_running());
         assert!(!FixedProbe(false).is_running());
+    }
+
+    #[test]
+    fn supported_process_names_are_case_insensitive() {
+        assert!(is_rimworld_process_name("RimWorldLinux"));
+        assert!(is_rimworld_process_name("RIMWORLDLINUX.X86_64"));
+        assert!(is_rimworld_process_name("RimWorldWin64.EXE"));
+        assert!(!is_rimworld_process_name("RimWorld"));
     }
 
     #[test]

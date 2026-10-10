@@ -47,7 +47,7 @@ pub enum LaunchGameError {
     #[error("ModsConfig.xml does not hold the selected order")]
     NotApplied(UnappliedReason),
     /// This install can't be started from here.
-    #[error("this install has no RimWorldWin64.exe")]
+    #[error("this install has no supported RimWorld executable")]
     Unavailable(LaunchUnavailable),
     /// The OS refused the launch request.
     #[error(transparent)]

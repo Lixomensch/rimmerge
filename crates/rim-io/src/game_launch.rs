@@ -10,7 +10,9 @@ use std::process::{Command, Stdio};
 
 use rim_analyzer::infra::paths::{is_game_dir, is_steam_managed_install};
 use rim_session::LaunchUnavailable;
-use rim_session::ports::{GameExecutable, GameLauncher, LaunchFailure, LaunchRoute};
+use rim_session::ports::{
+    GameExecutable, GameExecutableName, GameLauncher, LaunchFailure, LaunchRoute,
+};
 
 /// The link Windows hands to the Steam client already on this machine. A
 /// constant, never built from input; a test pins it to RimWorld's app id.
@@ -63,16 +65,9 @@ impl GameLauncher for SystemGameLauncher {
         if !is_game_dir(game_dir) {
             return Err(LaunchUnavailable::ExecutableMissing);
         }
-        let executable = GameExecutable::of_install(game_dir);
-        // `symlink_metadata`, not `metadata`: a link could point anywhere,
-        // and the only program a launch may start is the install's own file.
-        let is_regular_file = std::fs::symlink_metadata(executable.path())
-            .is_ok_and(|metadata| metadata.file_type().is_file());
-        if is_regular_file {
+        find_executable(game_dir).map_or(Err(LaunchUnavailable::ExecutableMissing), |executable| {
             Ok(LaunchRoute::Executable(executable))
-        } else {
-            Err(LaunchUnavailable::ExecutableMissing)
-        }
+        })
     }
 
     fn launch(&self, route: &LaunchRoute) -> Result<(), LaunchFailure> {
@@ -107,10 +102,39 @@ fn executable_command(executable: &GameExecutable) -> Command {
     command
 }
 
+#[cfg(windows)]
+const EXECUTABLE_CANDIDATES: &[GameExecutableName] = &[GameExecutableName::Windows];
+
+#[cfg(not(windows))]
+const EXECUTABLE_CANDIDATES: &[GameExecutableName] = &[
+    GameExecutableName::LinuxX86_64,
+    GameExecutableName::Linux,
+    GameExecutableName::Windows,
+];
+
+fn find_executable(game_dir: &Path) -> Option<GameExecutable> {
+    EXECUTABLE_CANDIDATES.iter().copied().find_map(|name| {
+        let executable = GameExecutable::of_install_named(game_dir, name);
+        let metadata = std::fs::symlink_metadata(executable.path()).ok()?;
+        if !metadata.file_type().is_file() {
+            return None;
+        }
+        #[cfg(unix)]
+        if name.requires_executable_bit()
+            && std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 == 0
+        {
+            return None;
+        }
+        Some(executable)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rim_analyzer::infra::paths::RIMWORLD_STEAM_APP_ID;
+    #[cfg(unix)]
+    use rim_session::ports::GameExecutableName;
     use rim_session::ports::RIMWORLD_EXECUTABLE;
     use std::fs;
     use tempfile::TempDir;
@@ -134,6 +158,18 @@ mod tests {
     fn install_with_executable() -> TempDir {
         let dir = install_without_executable();
         fs::write(dir.path().join(RIMWORLD_EXECUTABLE), b"MZ").expect("exe");
+        dir
+    }
+
+    #[cfg(unix)]
+    fn install_with_linux_executable(name: GameExecutableName, executable_mode: u32) -> TempDir {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = install_without_executable();
+        let path = dir.path().join(name.filename());
+        fs::write(&path, b"ELF").expect("linux executable");
+        fs::set_permissions(&path, fs::Permissions::from_mode(executable_mode))
+            .expect("permissions");
         dir
     }
 
@@ -161,6 +197,41 @@ mod tests {
                 install.path()
             )))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn route_prefers_the_linux_x86_64_executable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let install = install_with_linux_executable(GameExecutableName::Linux, 0o755);
+        let x86_64 = install
+            .path()
+            .join(GameExecutableName::LinuxX86_64.filename());
+        fs::write(&x86_64, b"ELF").expect("linux executable");
+        fs::set_permissions(&x86_64, fs::Permissions::from_mode(0o755)).expect("permissions");
+        let launcher = SystemGameLauncher::with_steam_check(never_steam);
+
+        let route = launcher.route(install.path());
+
+        assert_eq!(
+            route,
+            Ok(LaunchRoute::Executable(GameExecutable::of_install_named(
+                install.path(),
+                GameExecutableName::LinuxX86_64
+            )))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn route_rejects_a_linux_executable_without_execute_permission() {
+        let install = install_with_linux_executable(GameExecutableName::LinuxX86_64, 0o644);
+        let launcher = SystemGameLauncher::with_steam_check(never_steam);
+
+        let route = launcher.route(install.path());
+
+        assert_eq!(route, Err(LaunchUnavailable::ExecutableMissing));
     }
 
     #[test]
@@ -261,6 +332,10 @@ mod tests {
 
     #[test]
     fn the_executable_name_matches_the_probed_process_name() {
-        assert!(RIMWORLD_EXECUTABLE.eq_ignore_ascii_case(crate::process::RIMWORLD_PROCESS_NAME));
+        assert!(
+            crate::process::RIMWORLD_PROCESS_NAMES
+                .iter()
+                .any(|name| RIMWORLD_EXECUTABLE.eq_ignore_ascii_case(name))
+        );
     }
 }
