@@ -172,6 +172,60 @@ pub const WORKSHOP_DIR_VAR: &str = "RIMMERGE_WORKSHOP_DIR";
 /// `RIMMERGE_MODS_CONFIG`: the active `ModsConfig.xml` override. See
 /// [`GAME_DIR_VAR`] for why these names live in this module.
 pub const MODS_CONFIG_VAR: &str = "RIMMERGE_MODS_CONFIG";
+/// `RIMMERGE_PROFILE_DIR`: the base directory where `config.json`, `profiles/`,
+/// `databases/` and app-global settings live. Overrides the platform default.
+pub const PROFILE_DIR_VAR: &str = "RIMMERGE_PROFILE_DIR";
+
+/// The base directory for Rimmerge's own files (`config.json`, `profiles/`,
+/// `databases/`):
+///
+/// 1. `RIMMERGE_PROFILE_DIR` when set and non-empty.
+/// 2. On Windows: `%LOCALAPPDATA%\rimmerge`.
+/// 3. On Unix/Linux: `$XDG_DATA_HOME/rimmerge`, falling back to `$HOME/.local/share/rimmerge`.
+///
+/// Returns `None` when neither the override nor the platform data directory
+/// environment variable is set.
+#[must_use]
+pub fn default_profile_base_dir() -> Option<PathBuf> {
+    if let Some(base) = path_var(PROFILE_DIR_VAR) {
+        return Some(base);
+    }
+
+    #[cfg(windows)]
+    {
+        path_var("LOCALAPPDATA").map(|local| local.join("rimmerge"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        if let Some(xdg) = path_var("XDG_DATA_HOME") {
+            return Some(xdg.join("rimmerge"));
+        }
+        path_var("HOME").map(|home| home.join(".local").join("share").join("rimmerge"))
+    }
+}
+
+/// The default database folder for RimSort rules (`RimSort/dbs`):
+///
+/// - On Windows: `%LOCALAPPDATA%\RimSort\dbs`
+/// - On Unix/Linux: `$XDG_DATA_HOME/RimSort/dbs` or `$HOME/.local/share/RimSort/dbs`
+///
+/// Returns `None` if the platform environment variable is unset.
+#[must_use]
+pub fn default_rimsort_dbs_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        path_var("LOCALAPPDATA").map(|local| local.join("RimSort").join("dbs"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        if let Some(xdg) = path_var("XDG_DATA_HOME") {
+            return Some(xdg.join("RimSort").join("dbs"));
+        }
+        path_var("HOME").map(|home| home.join(".local").join("share").join("RimSort").join("dbs"))
+    }
+}
 
 /// The value of environment variable `key`, if it is set to something
 /// other than whitespace.
@@ -796,6 +850,29 @@ mod tests {
         assert_eq!(GAME_DIR_VAR, "RIMMERGE_GAME_DIR");
         assert_eq!(WORKSHOP_DIR_VAR, "RIMMERGE_WORKSHOP_DIR");
         assert_eq!(MODS_CONFIG_VAR, "RIMMERGE_MODS_CONFIG");
+        assert_eq!(PROFILE_DIR_VAR, "RIMMERGE_PROFILE_DIR");
+    }
+
+    #[test]
+    fn default_profile_base_dir_resolves_or_handles_unset() {
+        let base = default_profile_base_dir();
+        if let Some(path) = base {
+            assert!(
+                path.ends_with("rimmerge") || std::env::var_os(PROFILE_DIR_VAR).is_some(),
+                "resolved base should end in rimmerge: {path:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_rimsort_dbs_dir_resolves_or_handles_unset() {
+        let dbs = default_rimsort_dbs_dir();
+        if let Some(path) = dbs {
+            assert!(
+                path.ends_with("dbs"),
+                "resolved rimsort dbs dir should end in dbs: {path:?}"
+            );
+        }
     }
 
     /// A scratch dir under the OS temp root, removed on drop. Manual because

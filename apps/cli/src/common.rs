@@ -55,7 +55,8 @@ pub struct PathsArgs {
 }
 
 /// Where `config.json`, `profiles/` and `databases/` live:
-/// `RIMMERGE_PROFILE_DIR` when set, else `%LOCALAPPDATA%\rimmerge`.
+/// `RIMMERGE_PROFILE_DIR` when set, else `%LOCALAPPDATA%\rimmerge` on Windows,
+/// or `$XDG_DATA_HOME/rimmerge` / `~/.local/share/rimmerge` on Linux.
 ///
 /// The variable is honoured here for the same reason the desktop's own
 /// `profile_base()` honours it (that function's doc comment has the
@@ -66,12 +67,9 @@ pub struct PathsArgs {
 /// to the real one is exactly the asymmetry that produces "it worked
 /// when I ran it the other way".
 pub(crate) fn default_profile_base() -> anyhow::Result<PathBuf> {
-    if let Some(base) = rim_analyzer::infra::paths::path_var("RIMMERGE_PROFILE_DIR") {
-        return Ok(base);
-    }
-    let local_app_data =
-        std::env::var("LOCALAPPDATA").context("LOCALAPPDATA environment variable is not set")?;
-    Ok(PathBuf::from(local_app_data).join("rimmerge"))
+    rim_analyzer::infra::paths::default_profile_base_dir().context(
+        "neither RIMMERGE_PROFILE_DIR nor the user data directory is set",
+    )
 }
 
 /// Reads the app-global [`rim_session::NetworkPolicy`] through

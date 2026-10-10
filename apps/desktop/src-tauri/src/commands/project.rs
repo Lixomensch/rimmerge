@@ -175,12 +175,7 @@ pub async fn load_project(
 /// `--cache-dir` default uses — the one base every interface's
 /// `profile_dir`/cache directory is hashed under.
 pub(crate) fn profile_base() -> Option<PathBuf> {
-    std::env::var("RIMMERGE_PROFILE_DIR")
-        .map(PathBuf::from)
-        .or_else(|_| {
-            std::env::var("LOCALAPPDATA").map(|local| PathBuf::from(local).join("rimmerge"))
-        })
-        .ok()
+    rim_analyzer::infra::paths::default_profile_base_dir()
 }
 
 /// The default game/workshop/`ModsConfig.xml`/profile paths, straight
@@ -355,9 +350,7 @@ pub async fn get_default_rimsort_paths(
 
 /// See [`get_default_rimsort_paths`].
 pub(crate) async fn get_default_rimsort_paths_inner(state: &AppState) -> Option<RimSortPathsDto> {
-    let dbs_dir = PathBuf::from(std::env::var("LOCALAPPDATA").ok()?)
-        .join("RimSort")
-        .join("dbs");
+    let dbs_dir = rim_analyzer::infra::paths::default_rimsort_dbs_dir()?;
     let existing_path = |path: PathBuf| path.is_file().then(|| path.display().to_string());
 
     let local_community = existing_path(
