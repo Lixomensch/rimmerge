@@ -147,7 +147,9 @@ test.describe("launch RimWorld", () => {
     await expect(page.getByTestId(SIDEBAR_LAUNCH)).toBeDisabled();
   });
 
-  test("an install without a supported executable says so and cannot be launched", async ({ page }) => {
+  test("an install without a supported executable says so and cannot be launched", async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       window.__LAUNCH_ROUTE__ = "unavailable";
     });

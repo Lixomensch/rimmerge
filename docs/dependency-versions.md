@@ -8,22 +8,19 @@ snapshot plus the reasoning behind every deliberate pin.
 ## Toolchain
 
 `rust-toolchain.toml` pins `channel = "stable"` (resolves to whatever
-stable is installed on the host — every contributor and CI runner is a
-fixed Windows/MSVC host, so a triple-suffixed channel buys nothing
-here). The reference toolchain is `rustc 1.98.1`; `rust-version` in
+stable is installed on the host; the current CI runner remains
+Windows/MSVC, while Linux development uses the same stable channel).
+The reference toolchain is `rustc 1.98.1`; `rust-version` in
 `Cargo.toml` floors it at `1.98`.
 
-## Why Windows/MSVC only
+## Platform dependency split
 
-Several dependencies here are Windows-specific, not merely
-Windows-first: `sysinfo` is pulled in with its Windows process APIs
-(`rim-io` reads the running-game-process check through it), and the
-desktop app links WebView2 through Tauri's `wry`/`tauri-runtime-wry`.
-`deny.toml`'s `[graph].targets = ["x86_64-pc-windows-msvc"]` reflects
-this: it prunes the dependency graph to the one target this app
-actually ships for, which also keeps `cargo deny check` from flagging
-advisories/licenses in non-Windows branches of Tauri's dependency tree
-(`wry`'s Linux webview backend) that this build never compiles.
+The backend now supports Windows/MSVC and Linux GNU targets. `sysinfo`
+provides the process-name probe on both platforms, while Tauri selects
+WebView2 on Windows and WebKitGTK/GTK through `wry` on Linux. The Linux
+desktop therefore needs the native packages listed in [docs/install.md](install.md).
+`deny.toml` audits both target graphs; its documented advisory exceptions
+are limited to transitive GTK/WebKit dependencies with no safe upgrade.
 
 ## Rust — workspace dependencies (`[workspace.dependencies]`)
 

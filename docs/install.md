@@ -1,5 +1,9 @@
 # Install
 
+Linux source builds are supported for native RimWorld installs and Steam
+Proton installs. Prebuilt releases and the portable packaging workflow are
+still Windows-only; Linux packaging is part of the later release work.
+
 ## Getting Rimmerge
 
 **Prebuilt releases.** Rimmerge ships as a portable zip, not an
@@ -19,6 +23,21 @@ usually preinstalled on Windows 10 and 11, but not on every LTSC, N, or
 unserviced build. If `Rimmerge.exe` opens no window, install the
 Evergreen runtime from
 [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+On Debian/Ubuntu, a Linux desktop development build needs WebKitGTK 4.1,
+GTK and the native build tools:
+
+```sh
+sudo apt update
+sudo apt install build-essential curl file libayatana-appindicator3-dev \
+  libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget
+```
+
+The Tauri window works with both X11 and Wayland sessions. Run
+`bun run tauri dev` from `apps/desktop` in the session you want to validate;
+the native folder/file dialogs use `tauri-plugin-dialog` and require the
+`dialog:allow-open` and `dialog:allow-save` capabilities already committed
+in `src-tauri/capabilities/default.json`.
 
 To use the CLI from any terminal, add the extracted folder's `cli`
 subfolder to your `PATH`. The folder is named after the version, so
@@ -69,18 +88,20 @@ installs automatically if you use `rustup`):
 
 ```sh
 cargo build --release -p rimmerge-cli
-# binary at target/release/rimmerge.exe
+# binary at target/release/rimmerge[.exe]
 ```
 
 **Building the desktop app from source.** Needs the same Rust
-toolchain, an MSVC host (Tauri on Windows requires it), and
-[bun](https://bun.sh):
+toolchain, Bun, and the platform's Tauri webview dependencies. On Windows
+Tauri requires an MSVC host and WebView2; on Linux use the WebKitGTK packages
+listed above and an X11 or Wayland session, plus
+[Bun](https://bun.sh).
 
 ```sh
 cd apps/desktop
 bun install
 bun run tauri build
-# executable at target/release/rimmerge-desktop.exe (bundling is off:
+# executable at target/release/rimmerge-desktop[.exe] (bundling is off:
 # no installer is produced)
 ```
 
@@ -140,9 +161,11 @@ The workshop folder and `ModsConfig.xml` follow the identical ladder
 (`RIMMERGE_WORKSHOP_DIR`/`RIMMERGE_MODS_CONFIG`, then `config.json`,
 then a game-folder-relative default).
 
-**Platform support today**: Rimmerge builds and ships for Windows only.
-The candidate lists above cover macOS and Linux paths in case that
-changes, but neither platform is tested or supported yet.
+**Platform support today**: prebuilt Rimmerge releases ship for Windows.
+Linux source builds support native RimWorld paths, XDG/HOME profile data,
+Linux executables and Steam Proton routing. Linux desktop runtime validation
+requires the WebKitGTK dependencies above; Linux release packaging is not
+published yet.
 
 ## `config.json`
 

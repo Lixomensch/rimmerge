@@ -9,6 +9,11 @@ the crate graph this app sits on top of, and
 [docs/desktop.md](../../docs/desktop.md) for a page-by-page walkthrough
 with screenshots.
 
+On Linux, install the WebKitGTK/Tauri development dependencies listed in
+[docs/install.md](../../docs/install.md) before the first build. The app can
+run under X11 or Wayland; validate native folder and file dialogs in both
+sessions when changing dialog-related code.
+
 ## Dev loop
 
 ```sh
@@ -86,7 +91,7 @@ checked-in files don't match, which is what CI enforces.
 |---|---|---|---|
 | Component/composable (Vitest) | `bun run test` | Individual `.vue` components and composables, mounted with Vue Test Utils; IPC calls go through a mocked backend (`src/services/ipc.mock.ts`), never a real one. | Yes |
 | Mock-IPC E2E (Playwright) | `bun run e2e` | Full user flows against a Vite dev server on a dedicated port (`5183`, always started by this config with `--strictPort`, never reused), with `@tauri-apps/api/mocks`' `mockIPC` replacing every Tauri command. No Rust backend runs at all — fast, and what CI runs on every push/PR. Must pass twice in a row with zero local retries. | Yes |
-| CDP smoke (Playwright) | `bun run e2e:smoke` | A handful of specs, all against a **real** `bun run tauri dev` build (a real Rust backend, a real WebView2 window), attached to over the Chrome DevTools Protocol. Proves the real IPC round-trips this app depends on actually work end to end — a real scan, a real merge/export, a real def-inspector query — against scratch copies of committed test fixtures. One spec reads this machine's own real, read-only RimWorld/Workshop/`ModsConfig.xml` to exercise real-world conflict shapes no synthetic fixture reproduces, but never writes to them. | **No — local/pre-release only** |
+| CDP smoke (Playwright) | `bun run e2e:smoke` | A handful of specs against a **real** `bun run tauri dev` build (a real Rust backend and native WebView), attached over the Chrome DevTools Protocol. Proves real IPC round-trips against scratch copies of committed test fixtures. One spec reads this machine's own real, read-only RimWorld/Workshop/`ModsConfig.xml`; it never writes to them. | **No — local/pre-release only** |
 
 Run the CDP smoke tier locally before a release, or after touching
 `apply`, project loading, or anything else it exercises:
@@ -97,9 +102,9 @@ bun run e2e:smoke
 ```
 
 It takes a few minutes (a full `cargo build` of `rimmerge-desktop` the
-first time) and needs a real Windows desktop session with WebView2
-installed — that's why it isn't part of CI, which only runs the
-mock-IPC Playwright tier plus the Vitest suite.
+first time) and needs a real desktop session with WebView2 on Windows or
+WebKitGTK on Linux. It is not part of CI, which runs the mock-IPC Playwright
+tier plus the Vitest suite.
 
 ## License
 

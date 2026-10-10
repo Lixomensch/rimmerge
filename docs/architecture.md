@@ -65,6 +65,11 @@ interface apps.
   (see [desktop.md](desktop.md)), talking to the backend only through
   generated, typed DTOs (`ts-rs` — see below).
 
+The desktop composition root is platform-neutral. Tauri uses WebView2 on
+Windows and WebKitGTK/GTK on Linux; platform-specific game executable
+selection and process names live in `rim-io`, not in the Vue interface or
+the `rim-session` use cases.
+
 ## Where to add what
 
 - A new ordering fact derived from install content → `rim-analyzer`

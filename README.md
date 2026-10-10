@@ -5,7 +5,7 @@
 [![CI](https://github.com/Rimmerge-Project/rimmerge/actions/workflows/ci.yml/badge.svg)](https://github.com/Rimmerge-Project/rimmerge/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Rimmerge-Project/rimmerge)](https://github.com/Rimmerge-Project/rimmerge/releases)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Platform: Windows and Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/nephilim)
 
 Rimmerge sorts a RimWorld mod list into a conflict-aware load order and
@@ -25,10 +25,12 @@ shells over the same engine.
 
 ## Install
 
-Rimmerge builds and ships for Windows only. See
-[docs/install.md](docs/install.md#getting-rimmerge) for how to get it
-(portable zip release, or build from source) and how it finds your RimWorld
-install, Steam Workshop folder, and `ModsConfig.xml`.
+Prebuilt releases are currently Windows-only. The CLI and Linux path,
+launcher, and profile support can be built from source; the Tauri desktop
+app needs the Linux WebKitGTK dependencies described in
+[docs/install.md](docs/install.md#getting-rimmerge). That page also explains
+how Rimmerge finds your RimWorld install, Steam Workshop folder, and
+`ModsConfig.xml` on each platform.
 
 ## Quickstart
 
