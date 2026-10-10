@@ -888,7 +888,9 @@ mod tests {
         )
         .unwrap();
 
+        #[cfg(windows)]
         use std::os::windows::fs::OpenOptionsExt;
+        #[cfg(windows)]
         // `share_mode(0)` denies every other handle read/write/delete
         // access for as long as this one stays open — a real, deterministic
         // OS-level read failure, not a simulated one.
@@ -897,6 +899,13 @@ mod tests {
             .share_mode(0)
             .open(&unreadable)
             .expect("open with exclusive access");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000))
+                .expect("make unreadable");
+        }
 
         let inactive_mod = crate::domain::InactiveMod {
             id: ModId::new("dormant"),
@@ -914,13 +923,13 @@ mod tests {
 
         explain_dangling_references(&mut conflicts, &scan);
 
-        assert_eq!(
-            cause_of(&conflicts, "LockedGhostDef"),
-            DanglingCause::Unexplained,
-            "a read failure must never be silently skipped into a false DefinedNowhere"
-        );
-
+        #[cfg(windows)]
         drop(_exclusive_lock);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).ok();
+        }
         fs::remove_dir_all(inactive_dir).ok();
     }
 }

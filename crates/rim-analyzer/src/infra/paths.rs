@@ -25,23 +25,35 @@ use crate::domain::GameVersion;
 /// name, and the `steamapps` subfolder every Steam library shares.
 pub const RIMWORLD_STEAM_APP_ID: &str = "294100";
 
-/// `<game_dir>/RimWorldWin64_Data/Managed`: the game's own managed
+/// The install's Unity data folder: `RimWorldLinux_Data` on native Linux,
+/// or `RimWorldWin64_Data` on Windows (and Proton/Wine installs on Linux).
+///
+/// Returns `RimWorldLinux_Data` if it exists as a directory; otherwise defaults to
+/// `RimWorldWin64_Data`.
+#[must_use]
+pub fn unity_data_dir(game_dir: &Path) -> PathBuf {
+    let linux = game_dir.join("RimWorldLinux_Data");
+    if linux.is_dir() {
+        return linux;
+    }
+    game_dir.join("RimWorldWin64_Data")
+}
+
+/// `<game_dir>/<unity_data>/Managed`: the game's own managed
 /// assembly folder. Core/DLC ship no `Assemblies/` folder of their own —
 /// their assembly names have to be seeded from here.
 #[must_use]
 pub fn managed_assemblies_dir(game_dir: &Path) -> PathBuf {
-    game_dir.join("RimWorldWin64_Data").join("Managed")
+    unity_data_dir(game_dir).join("Managed")
 }
 
-/// `<game_dir>/RimWorldWin64_Data/globalgamemanagers`: Unity's own
+/// `<game_dir>/<unity_data>/globalgamemanagers`: Unity's own
 /// serialized resource manifest, scanned (never fully parsed) for Core's
 /// built-in texture container paths — see
 /// `extract::asset_index::resource_container_paths`.
 #[must_use]
 pub fn global_game_managers_path(game_dir: &Path) -> PathBuf {
-    game_dir
-        .join("RimWorldWin64_Data")
-        .join("globalgamemanagers")
+    unity_data_dir(game_dir).join("globalgamemanagers")
 }
 
 /// `<game_dir>/Data/Core/Defs/Misc/ExpansionDefs/ExpansionDefs.xml`: the
@@ -82,7 +94,10 @@ pub fn default_workshop_dir(game_dir: &Path) -> PathBuf {
         })
 }
 
-/// `%USERPROFILE%\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Config\ModsConfig.xml`.
+/// `%USERPROFILE%\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Config\ModsConfig.xml`
+/// on Windows, or `~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml`
+/// on Unix/Linux (following Unity's fixed standalone player config directory).
+#[cfg(windows)]
 pub fn default_mods_config_path() -> Result<PathBuf> {
     let profile =
         std::env::var("USERPROFILE").context("USERPROFILE environment variable is not set")?;
@@ -93,6 +108,42 @@ pub fn default_mods_config_path() -> Result<PathBuf> {
         .join("RimWorld by Ludeon Studios")
         .join("Config")
         .join("ModsConfig.xml"))
+}
+
+/// `~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml`
+/// on Unix/Linux (Unity's standalone player config directory), with fallback to
+/// common Proton/Wine Steam Play paths.
+#[cfg(not(windows))]
+pub fn default_mods_config_path() -> Result<PathBuf> {
+    let home = std::env::var("HOME").context("HOME environment variable is not set")?;
+    let home_path = PathBuf::from(home);
+
+    let native = home_path
+        .join(".config")
+        .join("unity3d")
+        .join("Ludeon Studios")
+        .join("RimWorld by Ludeon Studios")
+        .join("Config")
+        .join("ModsConfig.xml");
+
+    if native.is_file() {
+        return Ok(native);
+    }
+
+    // Check common Proton / Wine Steam Play prefix paths
+    let proton_candidates = [
+        home_path.join(".local/share/Steam/steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"),
+        home_path.join(".steam/steam/steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"),
+    ];
+
+    for candidate in proton_candidates {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    // Default to the native path
+    Ok(native)
 }
 
 /// The game version from `<game_dir>/Version.txt`'s first two components.
@@ -518,11 +569,18 @@ mod tests {
 
     #[test]
     fn default_workshop_dir_is_a_sibling_of_common() {
-        let game_dir = Path::new(r"Q:\Steam\steamapps\common\RimWorld");
-        let workshop = default_workshop_dir(game_dir);
+        let game_dir = Path::new("Steam")
+            .join("steamapps")
+            .join("common")
+            .join("RimWorld");
+        let workshop = default_workshop_dir(&game_dir);
         assert_eq!(
             workshop,
-            Path::new(r"Q:\Steam\steamapps\workshop\content\294100")
+            Path::new("Steam")
+                .join("steamapps")
+                .join("workshop")
+                .join("content")
+                .join("294100")
         );
     }
 
@@ -580,8 +638,48 @@ mod tests {
     #[test]
     fn a_library_becomes_that_librarys_rimworld_folder() {
         assert_eq!(
-            rimworld_under_steam_library(Path::new(r"Q:\Steam")),
-            PathBuf::from(r"Q:\Steam\steamapps\common\RimWorld")
+            rimworld_under_steam_library(Path::new("Steam")),
+            Path::new("Steam")
+                .join("steamapps")
+                .join("common")
+                .join("RimWorld")
+        );
+    }
+
+    #[test]
+    fn unity_data_dir_detects_linux_folder_when_present() {
+        let scratch = Scratch::new("unity-linux");
+        let game_dir = scratch.path();
+        std::fs::create_dir_all(game_dir.join("RimWorldLinux_Data")).expect("create linux data");
+        assert_eq!(
+            unity_data_dir(game_dir),
+            game_dir.join("RimWorldLinux_Data")
+        );
+        assert_eq!(
+            managed_assemblies_dir(game_dir),
+            game_dir.join("RimWorldLinux_Data").join("Managed")
+        );
+        assert_eq!(
+            global_game_managers_path(game_dir),
+            game_dir.join("RimWorldLinux_Data").join("globalgamemanagers")
+        );
+    }
+
+    #[test]
+    fn unity_data_dir_falls_back_to_win64_when_linux_folder_absent() {
+        let scratch = Scratch::new("unity-win");
+        let game_dir = scratch.path();
+        assert_eq!(
+            unity_data_dir(game_dir),
+            game_dir.join("RimWorldWin64_Data")
+        );
+        assert_eq!(
+            managed_assemblies_dir(game_dir),
+            game_dir.join("RimWorldWin64_Data").join("Managed")
+        );
+        assert_eq!(
+            global_game_managers_path(game_dir),
+            game_dir.join("RimWorldWin64_Data").join("globalgamemanagers")
         );
     }
 
