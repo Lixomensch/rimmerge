@@ -8,7 +8,7 @@
 //! file whose location that answer determines — it is a bootstrap
 //! problem, not a preference. So these three paths get their own file,
 //! one directory up: `<base>/config.json`, a sibling of `profiles/` and
-//! `databases/`, where `base` is the same `%LOCALAPPDATA%\rimmerge` both
+//! `databases/`, where `base` is the same platform data directory both
 //! interfaces already compute (and which the desktop's existing
 //! `RIMMERGE_PROFILE_DIR` override already redirects, so a scratch base
 //! gets a scratch `config.json` for free).

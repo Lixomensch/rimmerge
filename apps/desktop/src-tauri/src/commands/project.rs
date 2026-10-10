@@ -168,8 +168,9 @@ pub async fn load_project(
 
 /// The base directory `profile_dir`s are hashed under: `RIMMERGE_PROFILE_DIR`
 /// when set (the Playwright CDP smoke tier points this at a scratch
-/// directory so it never touches the real profile store), else
-/// `%LOCALAPPDATA%\rimmerge`. `pub(crate)` so
+/// directory so it never touches the real profile store), else the platform
+/// data directory (`%LOCALAPPDATA%\rimmerge` on Windows or XDG data on Linux).
+/// `pub(crate)` so
 /// `commands::rules_databases` can derive the same
 /// `rim_io::databases_dir`-relative cache directory `apps/cli`'s own
 /// `--cache-dir` default uses — the one base every interface's
@@ -212,7 +213,7 @@ pub async fn get_default_paths() -> DefaultPathsDto {
     let Some(base) = profile_base() else {
         return DefaultPathsDto {
             error: Some(
-                "neither RIMMERGE_PROFILE_DIR nor LOCALAPPDATA is set, so rimmerge has nowhere \
+                "neither RIMMERGE_PROFILE_DIR nor the platform data directory is available, so rimmerge has nowhere \
                  to keep its own files"
                     .to_string(),
             ),
@@ -288,7 +289,7 @@ fn path_resolution_error_to_dto(error: &rim_io::PathResolutionError) -> DefaultP
 pub async fn save_app_config(config: AppConfigDto) -> Result<(), CommandError> {
     let base = profile_base().ok_or_else(|| {
         CommandError::internal(
-            "neither RIMMERGE_PROFILE_DIR nor LOCALAPPDATA is set, so there is nowhere to write \
+            "neither RIMMERGE_PROFILE_DIR nor the platform data directory is available, so there is nowhere to write \
              config.json",
         )
     })?;
@@ -313,12 +314,13 @@ fn pinned_path(value: Option<String>) -> Option<PathBuf> {
         .map(|text| rim_io::pinned_path(&PathBuf::from(text)))
 }
 
-/// RimSort's own default database directory, `%LOCALAPPDATA%\RimSort\dbs`,
+/// RimSort's own default database directory (`%LOCALAPPDATA%\RimSort\dbs` on
+/// Windows or `$XDG_DATA_HOME/RimSort/dbs` on Linux),
 /// prefilling the rules page's import dialog — the same layout
 /// `apps/cli`'s own `import` command expects (`userRules.json` directly
 /// under it, `communityRules.json`/`steamDB.json` under their
-/// subfolders). Returns `None` for the whole struct when `%LOCALAPPDATA%`
-/// itself isn't set; each of the three fields is `None` **individually**
+/// subfolders). Returns `None` for the whole struct when no platform data
+/// directory is available; each of the three fields is `None` **individually**
 /// when that specific file doesn't exist on disk, so a machine with no
 /// RimSort install at all prefills nothing and reaches the all-`None`
 /// import instead of failing with a hard `ImportError` on three

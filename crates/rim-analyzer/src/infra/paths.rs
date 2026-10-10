@@ -187,22 +187,48 @@ pub const PROFILE_DIR_VAR: &str = "RIMMERGE_PROFILE_DIR";
 /// environment variable is set.
 #[must_use]
 pub fn default_profile_base_dir() -> Option<PathBuf> {
-    if let Some(base) = path_var(PROFILE_DIR_VAR) {
-        return Some(base);
-    }
-
     #[cfg(windows)]
     {
-        path_var("LOCALAPPDATA").map(|local| local.join("rimmerge"))
+        default_profile_base_dir_from(
+            path_var(PROFILE_DIR_VAR),
+            path_var("XDG_DATA_HOME"),
+            path_var("HOME"),
+            path_var("LOCALAPPDATA"),
+        )
     }
 
     #[cfg(not(windows))]
     {
-        if let Some(xdg) = path_var("XDG_DATA_HOME") {
-            return Some(xdg.join("rimmerge"));
-        }
-        path_var("HOME").map(|home| home.join(".local").join("share").join("rimmerge"))
+        default_profile_base_dir_from(
+            path_var(PROFILE_DIR_VAR),
+            path_var("XDG_DATA_HOME"),
+            path_var("HOME"),
+            None,
+        )
     }
+}
+
+fn default_profile_base_dir_from(
+    profile_override: Option<PathBuf>,
+    xdg_data_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+    local_app_data: Option<PathBuf>,
+) -> Option<PathBuf> {
+    profile_override.or_else(|| {
+        #[cfg(windows)]
+        {
+            let _ = (xdg_data_home, home);
+            local_app_data.map(|local| local.join("rimmerge"))
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = local_app_data;
+            xdg_data_home
+                .map(|xdg| xdg.join("rimmerge"))
+                .or_else(|| home.map(|home| home.join(".local").join("share").join("rimmerge")))
+        }
+    })
 }
 
 /// The default database folder for RimSort rules (`RimSort/dbs`):
@@ -215,15 +241,43 @@ pub fn default_profile_base_dir() -> Option<PathBuf> {
 pub fn default_rimsort_dbs_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     {
-        path_var("LOCALAPPDATA").map(|local| local.join("RimSort").join("dbs"))
+        default_rimsort_dbs_dir_from(
+            path_var("XDG_DATA_HOME"),
+            path_var("HOME"),
+            path_var("LOCALAPPDATA"),
+        )
     }
 
     #[cfg(not(windows))]
     {
-        if let Some(xdg) = path_var("XDG_DATA_HOME") {
-            return Some(xdg.join("RimSort").join("dbs"));
-        }
-        path_var("HOME").map(|home| home.join(".local").join("share").join("RimSort").join("dbs"))
+        default_rimsort_dbs_dir_from(path_var("XDG_DATA_HOME"), path_var("HOME"), None)
+    }
+}
+
+fn default_rimsort_dbs_dir_from(
+    xdg_data_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+    local_app_data: Option<PathBuf>,
+) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        let _ = (xdg_data_home, home);
+        local_app_data.map(|local| local.join("RimSort").join("dbs"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = local_app_data;
+        xdg_data_home
+            .map(|xdg| xdg.join("RimSort").join("dbs"))
+            .or_else(|| {
+                home.map(|home| {
+                    home.join(".local")
+                        .join("share")
+                        .join("RimSort")
+                        .join("dbs")
+                })
+            })
     }
 }
 
@@ -715,7 +769,9 @@ mod tests {
         );
         assert_eq!(
             global_game_managers_path(game_dir),
-            game_dir.join("RimWorldLinux_Data").join("globalgamemanagers")
+            game_dir
+                .join("RimWorldLinux_Data")
+                .join("globalgamemanagers")
         );
     }
 
@@ -733,7 +789,9 @@ mod tests {
         );
         assert_eq!(
             global_game_managers_path(game_dir),
-            game_dir.join("RimWorldWin64_Data").join("globalgamemanagers")
+            game_dir
+                .join("RimWorldWin64_Data")
+                .join("globalgamemanagers")
         );
     }
 
@@ -873,6 +931,61 @@ mod tests {
                 "resolved rimsort dbs dir should end in dbs: {path:?}"
             );
         }
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn linux_profile_base_prefers_override_then_xdg_then_home() {
+        let override_dir = PathBuf::from("/override");
+        let xdg_dir = PathBuf::from("/xdg");
+        let home_dir = PathBuf::from("/home/tester");
+
+        assert_eq!(
+            default_profile_base_dir_from(
+                Some(override_dir.clone()),
+                Some(xdg_dir.clone()),
+                Some(home_dir.clone()),
+                None,
+            ),
+            Some(override_dir)
+        );
+        assert_eq!(
+            default_profile_base_dir_from(
+                None,
+                Some(xdg_dir.clone()),
+                Some(home_dir.clone()),
+                None
+            ),
+            Some(xdg_dir.join("rimmerge"))
+        );
+        assert_eq!(
+            default_profile_base_dir_from(None, None, Some(home_dir.clone()), None),
+            Some(home_dir.join(".local").join("share").join("rimmerge"))
+        );
+        assert_eq!(default_profile_base_dir_from(None, None, None, None), None);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn linux_rimsort_dbs_prefers_xdg_then_home() {
+        let xdg_dir = PathBuf::from("/xdg");
+        let home_dir = PathBuf::from("/home/tester");
+
+        assert_eq!(
+            default_rimsort_dbs_dir_from(Some(xdg_dir.clone()), Some(home_dir.clone()), None),
+            Some(xdg_dir.join("RimSort").join("dbs"))
+        );
+        assert_eq!(
+            default_rimsort_dbs_dir_from(None, Some(home_dir.clone()), None),
+            Some(
+                home_dir
+                    .join(".local")
+                    .join("share")
+                    .join("RimSort")
+                    .join("dbs")
+            )
+        );
+        assert_eq!(default_rimsort_dbs_dir_from(None, None, None), None);
     }
 
     /// A scratch dir under the OS temp root, removed on drop. Manual because
