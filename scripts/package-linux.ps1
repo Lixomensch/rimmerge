@@ -4,14 +4,15 @@
 #   Rimmerge_<version>_amd64.deb                       Tauri-generated .deb package
 #   Rimmerge_<version>_amd64.AppImage                  Tauri-generated AppImage
 #
-# The .deb and AppImage are already built by `tauri build --bundles deb,appimage`
-# in the CI job; this script collects them from target/release/bundle/ alongside
+# The .deb and AppImage are built by Tauri; repack-appimage.py then removes
+# host Wayland/GLib libraries from the AppImage. This script collects them alongside
 # the portable tarball it assembles itself. Shared by the CI workflow and a
 # maintainer's local check, so a local run produces the same layout a release ships.
 #
 # Prerequisites (this script builds nothing):
 #   cargo build --release -p rimmerge-cli
 #   (cd apps/desktop && bun run tauri build)
+#   python3 scripts/repack-appimage.py target/release/bundle/appimage/Rimmerge_<version>_amd64.AppImage
 #
 # Usage:
 #   pwsh ./scripts/package-linux.ps1 -Version 1.0.0 [-OutDir <dir>] [-TargetDir <dir>]

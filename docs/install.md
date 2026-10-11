@@ -167,8 +167,13 @@ pwsh ./scripts/package-portable.ps1 -Version 1.0.0 -OutDir out
 
 Linux (after `bun run tauri build`):
 ```sh
+python3 scripts/repack-appimage.py target/release/bundle/appimage/Rimmerge_1.0.0_amd64.AppImage
 pwsh ./scripts/package-linux.ps1 -Version 1.0.0 -OutDir out
 ```
+
+Use the actual build version in both commands. The repacker reuses Tauri's
+cached output plugin and the original AppImage runtime. The release workflow
+performs this step before package inspection and checksum generation.
 
 ## Finding your install
 
@@ -236,7 +241,11 @@ validated by the Linux fixture tests alone.
 
 The `.deb` declares WebKitGTK 4.1 and GTK dependencies. The desktop portable
 tarball requires compatible system libraries. AppImage bundles libraries, but
-still depends on compatible host facilities; on Ubuntu 24.04, FUSE 2 is provided
+uses the host's Wayland, GLib/GIO and their supporting libraries to stay
+compatible with host graphics drivers and GIO modules such as GVFS. These
+system libraries must be present; the supported Ubuntu desktop baseline
+provides them. No `LD_PRELOAD` override is required by the packaging flow.
+It still depends on compatible host facilities; on Ubuntu 24.04, FUSE 2 is provided
 by `sudo apt install libfuse2t64` (see the
 [Ubuntu package](https://packages.ubuntu.com/noble/libfuse2t64)). The CLI can
 also be downloaded separately.

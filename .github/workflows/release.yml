@@ -118,6 +118,10 @@ jobs:
         shell: pwsh
         run: ../../scripts/tests/package-linux.Tests.ps1
 
+      - name: AppImage repacking regressions (synthetic files only)
+        if: runner.os == 'Linux'
+        run: python3 ../../scripts/tests/repack_appimage_tests.py
+
       # Build the CLI before Tauri: the Linux .deb includes it.
       # Built once per platform. On Windows: rimmerge.exe.
       # On Linux: rimmerge (ELF, no extension).
@@ -140,6 +144,12 @@ jobs:
       - name: bun run tauri build (Linux — deb + AppImage bundles)
         if: runner.os == 'Linux'
         run: bun run tauri build
+
+      - name: Repack AppImage with host Wayland and GLib libraries
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ needs.version-check.outputs.version }}
+        run: python3 ../../scripts/repack-appimage.py "../../target/release/bundle/appimage/Rimmerge_${VERSION}_amd64.AppImage"
 
       - name: Verify Linux bundle contents (Ubuntu)
         if: runner.os == 'Linux'
@@ -165,6 +175,17 @@ jobs:
           "$repo/target/release/bundle/appimage/Rimmerge_${VERSION}_amd64.AppImage" --appimage-extract
           test -x squashfs-root/AppRun
           test -f squashfs-root/Rimmerge.desktop
+          python3 - "$repo" "$scratch/squashfs-root" <<'PY'
+          import importlib.util
+          from pathlib import Path
+          import sys
+          sys.dont_write_bytecode = True
+          spec = importlib.util.spec_from_file_location("repack", Path(sys.argv[1]) / "scripts/repack-appimage.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          if module.host_libraries(Path(sys.argv[2])):
+              raise SystemExit("AppImage contains host Wayland/GLib libraries")
+          PY
           for license in LICENSE-MIT LICENSE-APACHE; do
             found=0
             while IFS= read -r -d '' candidate; do
