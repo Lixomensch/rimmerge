@@ -217,7 +217,8 @@ files, and all of them must agree before a tag is pushed:
    tarballs, a `.deb` with desktop/CLI/licenses, and a desktop AppImage
    (`scripts/package-linux.ps1`). The workflow requires all six files
    before creating a **draft** GitHub Release with `SHA256SUMS.txt`.
-   A manual workflow run builds/uploads artifacts without creating a release.
+   A manual workflow run validates/uploads all six packages and checksums as
+   the `release-artifacts` Actions artifact, without creating a release.
 4. Review the draft release (release notes, all six artifacts and the
    checksum file present) and publish it by hand. Binaries are unsigned;
    state that in the release notes. Linux packaging runs on the pinned
