@@ -1,22 +1,50 @@
 # Install
 
-Linux source builds are supported for native RimWorld installs and Steam
-Proton installs. Prebuilt releases and the portable packaging workflow are
-still Windows-only; Linux packaging is part of the later release work.
+Prebuilt releases ship for Windows and Linux. See the artifact table in
+[docs/dependency-versions.md](dependency-versions.md#release-artifacts) for the full
+list of files on each platform.
 
 ## Getting Rimmerge
 
-**Prebuilt releases.** Rimmerge ships as a portable zip, not an
-installer. A tagged release carries
-`Rimmerge-<version>-windows-x64-portable.zip` (the desktop app
-`Rimmerge.exe`, the command-line tool `cli\rimmerge.exe`, and the licenses),
-a CLI-only zip, and a `SHA256SUMS.txt`, as GitHub Release assets on
-[github.com/Rimmerge-Project/rimmerge/releases](https://github.com/Rimmerge-Project/rimmerge/releases).
-If no release exists yet for your platform, build from source.
+**Prebuilt releases.** Tagged releases ship the following GitHub Release
+assets on
+[github.com/Rimmerge-Project/rimmerge/releases](https://github.com/Rimmerge-Project/rimmerge/releases):
 
+- **Windows**: `Rimmerge-<version>-windows-x64-portable.zip` (the desktop
+  app `Rimmerge.exe`, the CLI `cli\rimmerge.exe`, and the licenses), a
+  CLI-only zip.
+- **Linux**: `rimmerge_<version>_amd64.deb` (Debian/Ubuntu package),
+  `Rimmerge_<version>_amd64.AppImage` (self-contained, runs on any
+  modern Linux), `Rimmerge-<version>-linux-x64-portable.tar.gz` (desktop +
+  CLI, extract anywhere), and a CLI-only tarball.
+
+All artifacts come with `SHA256SUMS.txt`.
+
+**Windows (portable zip):**
 1. Download the portable zip and extract it anywhere you like.
 2. Run `Rimmerge.exe`. There is no installer: Rimmerge writes nothing
    to the extracted folder, the registry, or Program Files.
+
+**Linux — `.deb` package (Debian/Ubuntu):**
+```sh
+sudo apt install ./rimmerge_<version>_amd64.deb
+```
+The app appears in your launcher as *Rimmerge*; the CLI (`rimmerge`) is
+installed to `/usr/bin`.
+
+**Linux — AppImage (any distribution):**
+```sh
+chmod +x Rimmerge_<version>_amd64.AppImage
+./Rimmerge_<version>_amd64.AppImage
+```
+
+**Linux — portable tarball (any distribution):**
+```sh
+tar -xzf Rimmerge-<version>-linux-x64-portable.tar.gz
+cd Rimmerge-<version>-linux-x64-portable
+./Rimmerge           # desktop app
+./cli/rimmerge       # CLI tool
+```
 
 The desktop app needs the Microsoft Edge **WebView2** runtime. It is
 usually preinstalled on Windows 10 and 11, but not on every LTSC, N, or
@@ -52,13 +80,21 @@ download was tampered with. To check a download, compare
 line in `SHA256SUMS.txt`, or run `sha256sum -c SHA256SUMS.txt` (bash)
 in the download folder.
 
-**Where your data lives.** Not in the extracted folder; two folders
-under `%LOCALAPPDATA%`:
+**Where your data lives (Windows).** Not in the extracted folder; two
+folders under `%LOCALAPPDATA%`:
 
 - `%LOCALAPPDATA%\rimmerge` — settings, profiles, decisions, and cached
   rule databases (see [`config.json`](#configjson) below).
 - `%LOCALAPPDATA%\dev.rimmerge.app` — the WebView2 cache and the
   desktop app's display preferences (language, mod-name display).
+
+**Where your data lives (Linux).** Under XDG directories (defaulting to
+`~/.local/share`):
+
+- `~/.local/share/rimmerge` — settings, profiles, decisions, and cached
+  rule databases.
+- `~/.local/share/dev.rimmerge.app` — the WebKitGTK cache and display
+  preferences.
 
 Moving the folder or extracting a newer release over it keeps both.
 
@@ -109,11 +145,17 @@ bun run tauri build
 day-to-day development — see
 [apps/desktop/README.md](../apps/desktop/README.md).
 
-To assemble the same zips a release ships from your own build
+To assemble the same packages a release ships from your own build
 (after also running `cargo build --release -p rimmerge-cli`):
 
+Windows:
 ```sh
 pwsh ./scripts/package-portable.ps1 -Version 1.0.0 -OutDir out
+```
+
+Linux (after `bun run tauri build -- --bundles deb,appimage`):
+```sh
+pwsh ./scripts/package-linux.ps1 -Version 1.0.0 -OutDir out
 ```
 
 ## Finding your install
@@ -161,11 +203,12 @@ The workshop folder and `ModsConfig.xml` follow the identical ladder
 (`RIMMERGE_WORKSHOP_DIR`/`RIMMERGE_MODS_CONFIG`, then `config.json`,
 then a game-folder-relative default).
 
-**Platform support today**: prebuilt Rimmerge releases ship for Windows.
-Linux source builds support native RimWorld paths, XDG/HOME profile data,
-Linux executables and Steam Proton routing. Linux desktop runtime validation
-requires the WebKitGTK dependencies above; Linux release packaging is not
-published yet.
+**Platform support today**: prebuilt Rimmerge releases ship for both
+Windows and Linux. Linux packages include native RimWorld paths, XDG/HOME
+profile data, Linux executables and Steam Proton routing. The desktop app
+requires the WebKitGTK dependencies listed above at runtime (they are
+declared as package dependencies in the `.deb`; the AppImage and tarball
+need them pre-installed).
 
 ## `config.json`
 

@@ -13,6 +13,23 @@ Windows/MSVC, while Linux development uses the same stable channel).
 The reference toolchain is `rustc 1.98.1`; `rust-version` in
 `Cargo.toml` floors it at `1.98`.
 
+## Release artifacts
+
+Tagged releases ship the following artifacts, built by `.github/workflows/release.yml`:
+
+| Platform | Artifact | Contents |
+|---|---|---|
+| Windows | `Rimmerge-<ver>-windows-x64-portable.zip` | Desktop (`Rimmerge.exe`) + CLI (`cli\\rimmerge.exe`) + licenses |
+| Windows | `rimmerge-cli-<ver>-x86_64-pc-windows-msvc.zip` | CLI only |
+| Linux | `rimmerge_<ver>_amd64.deb` | Tauri-built `.deb` package (install via `sudo apt install ./...`) |
+| Linux | `Rimmerge_<ver>_amd64.AppImage` | Self-contained AppImage (run via `chmod +x ... && ./...`) |
+| Linux | `Rimmerge-<ver>-linux-x64-portable.tar.gz` | Desktop + CLI + licenses, portable tarball |
+| Linux | `rimmerge-cli-<ver>-x86_64-unknown-linux-gnu.tar.gz` | CLI only |
+
+All release artifacts are accompanied by `SHA256SUMS.txt`; verify with
+`sha256sum -c SHA256SUMS.txt` (bash) or
+`(Get-FileHash .<zip>).Hash.ToLower()` (PowerShell).
+
 ## Platform dependency split
 
 The backend now supports Windows/MSVC and Linux GNU targets. `sysinfo`

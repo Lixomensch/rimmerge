@@ -25,12 +25,13 @@ shells over the same engine.
 
 ## Install
 
-Prebuilt releases are currently Windows-only. The CLI and Linux path,
-launcher, and profile support can be built from source; the Tauri desktop
-app needs the Linux WebKitGTK dependencies described in
-[docs/install.md](docs/install.md#getting-rimmerge). That page also explains
-how Rimmerge finds your RimWorld install, Steam Workshop folder, and
-`ModsConfig.xml` on each platform.
+Prebuilt releases ship for **Windows and Linux**. See the
+[Releases page](https://github.com/Rimmerge-Project/rimmerge/releases) for
+the current artifacts: a portable zip and CLI-only zip for Windows, a `.deb`
+package, `AppImage`, and portable tarball for Linux. Full installation
+instructions are in [docs/install.md](docs/install.md#getting-rimmerge),
+which also explains how Rimmerge finds your RimWorld install, Steam Workshop
+folder, and `ModsConfig.xml` on each platform.
 
 ## Quickstart
 
