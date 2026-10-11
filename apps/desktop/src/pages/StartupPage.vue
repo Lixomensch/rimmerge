@@ -253,7 +253,7 @@ const COLUMNS: readonly ColumnDefinition[] = [
   { widthPx: 76, headerKey: "startup.texFilesHeader", sortKey: "textureFiles" },
   { widthPx: 112, headerKey: "startup.texBytesHeader", sortKey: "textureBytes" },
   { widthPx: 76, headerKey: "startup.ddsFilesHeader", sortKey: "ddsFiles" },
-  { widthPx: 144, headerKey: "startup.badDimDdsHeader", sortKey: "badDimensionDds" },
+  { widthPx: 160, headerKey: "startup.badDimDdsHeader", sortKey: "badDimensionDds" },
   { widthPx: 68, headerKey: "startup.dllsHeader", sortKey: "assemblyCount" },
   { widthPx: 112, headerKey: "startup.dllBytesHeader", sortKey: "assemblyBytes" },
   { widthPx: 68, headerKey: "startup.defsHeader", sortKey: "defCount" },
