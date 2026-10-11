@@ -7,7 +7,7 @@
 # The .deb and AppImage are already built by `tauri build --bundles deb,appimage`
 # in the CI job; this script collects them from target/release/bundle/ alongside
 # the portable tarball it assembles itself. Shared by the CI workflow and a
-# maintainer\x27s local check, so a local run produces the same layout a release ships.
+# maintainer's local check, so a local run produces the same layout a release ships.
 #
 # Prerequisites (this script builds nothing):
 #   cargo build --release -p rimmerge-cli
@@ -29,7 +29,7 @@
 #   target/release/bundle/appimage/Rimmerge_<version>_amd64.AppImage
 #
 # Fails if any expected binary is missing and removes any partial output on
-# failure. Prints every output path. The release\x27s SHA256SUMS.txt is written
+# failure. Prints every output path. The release's SHA256SUMS.txt is written
 # by the workflow, not here.
 
 param(
@@ -40,6 +40,16 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+if (-not $IsLinux) { throw "Linux packages must be assembled on Linux" }
+
+function Invoke-CheckedNative {
+    param([string]$Command, [string[]]$Arguments)
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed with exit code $LASTEXITCODE"
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $OutDir)    { $OutDir    = $repoRoot }
 if (-not $TargetDir) { $TargetDir = Join-Path $repoRoot "target/release" }
@@ -47,8 +57,8 @@ if (-not $TargetDir) { $TargetDir = Join-Path $repoRoot "target/release" }
 $desktopBin = Join-Path $TargetDir "rimmerge-desktop"
 $cliBin     = Join-Path $TargetDir "rimmerge"
 foreach ($required in @($desktopBin, $cliBin)) {
-    if (-not (Test-Path -LiteralPath $required)) {
-        throw "missing $required - build it first (see this script\x27s header)"
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+        throw "missing $required - build it first (see this script's header)"
     }
 }
 
@@ -57,7 +67,7 @@ foreach ($required in @($desktopBin, $cliBin)) {
 $debPattern      = Join-Path $TargetDir "bundle/deb/Rimmerge_${Version}_amd64.deb"
 $appimagePattern = Join-Path $TargetDir "bundle/appimage/Rimmerge_${Version}_amd64.AppImage"
 foreach ($bundleFile in @($debPattern, $appimagePattern)) {
-    if (-not (Test-Path -LiteralPath $bundleFile)) {
+    if (-not (Test-Path -LiteralPath $bundleFile -PathType Leaf)) {
         throw "missing $bundleFile - run: bun run tauri build"
     }
 }
@@ -67,7 +77,6 @@ $cliName      = "rimmerge-cli-$Version-x86_64-unknown-linux-gnu"
 $tempDir      = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
 $stage        = Join-Path $tempDir ("rimmerge-linux-" + [guid]::NewGuid().ToString("N"))
 $folder       = Join-Path $stage $portableName
-New-Item -ItemType Directory -Path $folder | Out-Null
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $resolvedOut  = (Resolve-Path -LiteralPath $OutDir).Path
 $tarball      = Join-Path $resolvedOut "$portableName.tar.gz"
@@ -81,11 +90,12 @@ Rimmerge $Version - portable Linux build
 Run the desktop app:   ./Rimmerge
 Run the CLI:           ./cli/rimmerge
 
-To use the CLI from any terminal, add this folder\x27s cli/ subdirectory to
+To use the CLI from any terminal, add this folder's cli/ subdirectory to
 your PATH. The folder is named after the version, so rename it to
 "Rimmerge" first, or update the PATH entry each time you upgrade.
 
-Requires WebKitGTK 4.1 and GTK at runtime. On Debian/Ubuntu:
+Initial packaging baseline: Ubuntu 24.04, x86_64 (GNU/Linux).
+Requires WebKitGTK 4.1 and GTK at runtime. On Ubuntu 24.04:
   sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1 librsvg2-2
 
 Your data lives under XDG directories (defaulting to ~/.local/share):
@@ -105,8 +115,20 @@ Documentation: https://github.com/Rimmerge-Project/rimmerge
 Licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
 "@
 
-$outputs = @()
+$outputs = @($tarball, $cliTarball, $outDeb, $outAppImage)
+# Never delete a source package when an output folder aliases its directory.
+foreach ($output in $outputs) {
+    foreach ($source in @($desktopBin, $cliBin, $debPattern, $appimagePattern)) {
+        if ([System.IO.Path]::GetFullPath($output) -eq [System.IO.Path]::GetFullPath($source)) {
+            throw "output aliases an input: $output"
+        }
+    }
+    if ((Test-Path -LiteralPath $output) -and -not (Test-Path -LiteralPath $output -PathType Leaf)) {
+        throw "output is not a regular file: $output"
+    }
+}
 try {
+    New-Item -ItemType Directory -Path $folder | Out-Null
     # Portable tarball
     Copy-Item -LiteralPath $desktopBin -Destination (Join-Path $folder "Rimmerge")
     New-Item -ItemType Directory -Path (Join-Path $folder "cli") | Out-Null
@@ -116,29 +138,27 @@ try {
     }
     Set-Content -LiteralPath (Join-Path $folder "README.txt") -Value $readme -Encoding utf8
 
-    # chmod +x: required on Linux before tar-ing, so the archive preserves the
-    # executable bit. On a Windows host (local maintainer check), IsLinux is
-    # false and this is skipped — the tarball would carry the wrong permissions
-    # if assembled on Windows, so Linux runners are the authoritative packaging
-    # environment for this script.
-    if ($IsLinux -or $IsMacOS) {
-        chmod +x (Join-Path $folder "Rimmerge")
-        chmod +x (Join-Path $folder "cli/rimmerge")
-    }
+    # Archives preserve these modes; assemble both from the staged binaries.
+    Invoke-CheckedNative -Command chmod -Arguments @("+x", (Join-Path $folder "Rimmerge"), (Join-Path $folder "cli/rimmerge"))
 
     foreach ($stale in @($tarball, $cliTarball, $outDeb, $outAppImage)) {
         if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale }
     }
 
     # tar preserves the Unix permissions chmod set above.
-    tar -czf $tarball -C $stage $portableName
-    tar -czf $cliTarball -C $TargetDir rimmerge
+    Invoke-CheckedNative -Command tar -Arguments @("-czf", $tarball, "-C", $stage, $portableName)
+    Invoke-CheckedNative -Command tar -Arguments @("-czf", $cliTarball, "-C", (Join-Path $folder "cli"), "rimmerge")
 
     # Copy Tauri-generated packages verbatim.
     Copy-Item -LiteralPath $debPattern      -Destination $outDeb
     Copy-Item -LiteralPath $appimagePattern -Destination $outAppImage
 
-    $outputs = @($tarball, $cliTarball, $outDeb, $outAppImage)
+    Invoke-CheckedNative -Command chmod -Arguments @("+x", $outAppImage)
+    foreach ($output in $outputs) {
+        if (-not (Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
+            throw "missing or empty output: $output"
+        }
+    }
     $outputs | ForEach-Object { Write-Output $_ }
 }
 catch {
@@ -148,5 +168,5 @@ catch {
     throw
 }
 finally {
-    Remove-Item -LiteralPath $stage -Recurse -Force
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 }

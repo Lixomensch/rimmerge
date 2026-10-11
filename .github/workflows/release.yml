@@ -1,6 +1,6 @@
 name: Release
 
-# Matrix across Windows and Linux for the build jobs, matching ci.yml.
+# Windows and Ubuntu builds; pin the oldest supported Linux packaging baseline.
 # Windows builds produce portable zips via scripts/package-portable.ps1
 # (the Tauri bundler is off there — bundle.active: false keeps the exe
 # alone, matching what package-portable.ps1 expects). Linux builds
@@ -46,7 +46,7 @@ env:
 jobs:
   version-check:
     name: Version consistency
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       # The already-validated version, not `github.ref_name` — a
       # `workflow_dispatch` run's ref is a branch name (may contain `/`,
@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-24.04]
     defaults:
       run:
         working-directory: apps/desktop
@@ -96,7 +96,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl file libayatana-appindicator3-dev \
-            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget libfuse2
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget libfuse2t64
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -113,6 +113,20 @@ jobs:
       - name: bun install
         run: bun install --frozen-lockfile
 
+      - name: Linux packaging regressions (synthetic files only)
+        if: runner.os == 'Linux'
+        shell: pwsh
+        run: ../../scripts/tests/package-linux.Tests.ps1
+
+      # Build the CLI before Tauri: the Linux .deb includes it.
+      # Built once per platform. On Windows: rimmerge.exe.
+      # On Linux: rimmerge (ELF, no extension).
+      # `--jobs 4` avoids OOM on memory-constrained build hosts; a
+      # release build (lto = "thin", codegen-units = 1 — see Cargo.toml)
+      # is the single heaviest build this repo does.
+      - name: cargo build --release -p rimmerge-cli
+        run: cargo build --release -p rimmerge-cli --jobs 4
+
       # Runs `beforeBuildCommand` (`bun run build`) itself, so no
       # separate frontend build step is needed here.
       # On Windows, bundle.active is false, producing only the exe.
@@ -127,13 +141,37 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run tauri build
 
-      # Built once per platform. On Windows: rimmerge.exe.
-      # On Linux: rimmerge (ELF, no extension).
-      # `--jobs 4` avoids OOM on memory-constrained build hosts; a
-      # release build (lto = "thin", codegen-units = 1 — see Cargo.toml)
-      # is the single heaviest build this repo does.
-      - name: cargo build --release -p rimmerge-cli
-        run: cargo build --release -p rimmerge-cli --jobs 4
+      - name: Verify Linux bundle contents (Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ needs.version-check.outputs.version }}
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d)
+          trap 'rm -rf "$scratch"' EXIT
+          repo="$GITHUB_WORKSPACE"
+          deb="$repo/target/release/bundle/deb/Rimmerge_${VERSION}_amd64.deb"
+          test "$(dpkg-deb -f "$deb" Version)" = "$VERSION"
+          test "$(dpkg-deb -f "$deb" Architecture)" = amd64
+          dpkg-deb -x "$deb" "$scratch/deb"
+          test -x "$scratch/deb/usr/bin/rimmerge"
+          test -x "$scratch/deb/usr/bin/rimmerge-desktop"
+          cmp "$repo/target/release/rimmerge" "$scratch/deb/usr/bin/rimmerge"
+          test -f "$scratch/deb/usr/share/applications/Rimmerge.desktop"
+          for license in LICENSE-MIT LICENSE-APACHE; do
+            cmp "$repo/$license" "$scratch/deb/usr/share/doc/rimmerge/$license"
+          done
+          cd "$scratch"
+          "$repo/target/release/bundle/appimage/Rimmerge_${VERSION}_amd64.AppImage" --appimage-extract
+          test -x squashfs-root/AppRun
+          test -f squashfs-root/Rimmerge.desktop
+          for license in LICENSE-MIT LICENSE-APACHE; do
+            found=0
+            while IFS= read -r -d '' candidate; do
+              if cmp -s "$repo/$license" "$candidate"; then found=1; break; fi
+            done < <(find squashfs-root -type f -name "$license" -print0)
+            test "$found" = 1
+          done
 
       # Windows only: package-portable.ps1 produces the portable zip and
       # the CLI-only zip. Working directory is apps/desktop here, so the
@@ -160,7 +198,8 @@ jobs:
         with:
           name: zips-windows
           path: |
-            portable/*.zip
+            portable/Rimmerge-${{ needs.version-check.outputs.version }}-windows-x64-portable.zip
+            portable/rimmerge-cli-${{ needs.version-check.outputs.version }}-x86_64-pc-windows-msvc.zip
           # Fail loudly if the glob matched nothing — a build that
           # silently produced no zip must not upload an empty artifact
           # and let the release job fail later with a far less obvious
@@ -173,40 +212,38 @@ jobs:
         with:
           name: zips-linux
           path: |
-            portable/*.tar.gz
-            portable/*.deb
-            portable/*.AppImage
+            portable/Rimmerge-${{ needs.version-check.outputs.version }}-linux-x64-portable.tar.gz
+            portable/rimmerge-cli-${{ needs.version-check.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
+            portable/Rimmerge_${{ needs.version-check.outputs.version }}_amd64.deb
+            portable/Rimmerge_${{ needs.version-check.outputs.version }}_amd64.AppImage
           if-no-files-found: error
 
   release:
     name: Draft GitHub Release
-    needs: build
+    needs: [version-check, build]
     # Only an actual tag push creates a release — a `workflow_dispatch`
     # run (used to dry-run the build pipeline itself, e.g. to confirm
     # the packaging above) builds the artifacts but stops there;
     # `needs: build` still gates this job on that build succeeding.
     if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       # Only this job writes to the repo (creating the draft release);
       # every other job keeps the top-level `contents: read` default.
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
 
       # One checksum file for every artifact across all platforms, with
       # bare file names so `sha256sum -c SHA256SUMS.txt` works from the
       # download folder without path prefixes.
-      - name: SHA256SUMS
-        run: |
-          mkdir release-files
-          cp zips-windows/*.zip    release-files/ 2>/dev/null || true
-          cp zips-linux/*.tar.gz   release-files/ 2>/dev/null || true
-          cp zips-linux/*.deb      release-files/ 2>/dev/null || true
-          cp zips-linux/*.AppImage release-files/ 2>/dev/null || true
-          cd release-files
-          sha256sum * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+      - name: Collect all six artifacts and write SHA256SUMS
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version-check.outputs.version }}
+        run: ./scripts/collect-release-artifacts.ps1 -Version $env:VERSION -ArtifactDir . -OutDir release-files
 
       - uses: softprops/action-gh-release@v2
         with:

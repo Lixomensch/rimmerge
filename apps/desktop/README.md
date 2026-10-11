@@ -10,9 +10,9 @@ the crate graph this app sits on top of, and
 with screenshots.
 
 On Linux, install the WebKitGTK/Tauri development dependencies listed in
-[docs/install.md](../../docs/install.md) before the first build. The app can
-run under X11 or Wayland; validate native folder and file dialogs in both
-sessions when changing dialog-related code.
+[docs/install.md](../../docs/install.md) before the first build. See its Linux
+support boundary; native X11/Wayland dialogs require manual
+validation separately from the browser mock tier.
 
 ## Dev loop
 
@@ -32,8 +32,9 @@ Other useful commands:
 ```sh
 bun run dev                      # Vite dev server only, no Tauri window (mocked-IPC UI work)
 bun run build                    # vue-tsc -b && vite build
-bun run tauri build --debug      # a real debug binary, no dev server (bundling is off: no installer)
-bun run tauri build              # a real release binary: target/release/rimmerge-desktop.exe at the workspace root
+bun run tauri build --debug --no-bundle # debug binary only, no dev server or packages
+bun run tauri build              # release binary; Windows: exe only; Linux: deb + AppImage
+# Linux release packaging first needs: cargo build --release -p rimmerge-cli
 ```
 
 ## Pages
@@ -91,9 +92,9 @@ checked-in files don't match, which is what CI enforces.
 |---|---|---|---|
 | Component/composable (Vitest) | `bun run test` | Individual `.vue` components and composables, mounted with Vue Test Utils; IPC calls go through a mocked backend (`src/services/ipc.mock.ts`), never a real one. | Yes |
 | Mock-IPC E2E (Playwright) | `bun run e2e` | Full user flows against a Vite dev server on a dedicated port (`5183`, always started by this config with `--strictPort`, never reused), with `@tauri-apps/api/mocks`' `mockIPC` replacing every Tauri command. No Rust backend runs at all — fast, and what CI runs on every push/PR. Must pass twice in a row with zero local retries. | Yes |
-| CDP smoke (Playwright) | `bun run e2e:smoke` | A handful of specs against a **real** `bun run tauri dev` build (a real Rust backend and native WebView), attached over the Chrome DevTools Protocol. Proves real IPC round-trips against scratch copies of committed test fixtures. One spec reads this machine's own real, read-only RimWorld/Workshop/`ModsConfig.xml`; it never writes to them. | **No — local/pre-release only** |
+| CDP smoke (Playwright) | `bun run e2e:smoke` | A handful of specs against a **real** `bun run tauri dev` build (a real Rust backend and native WebView), attached over the Chrome DevTools Protocol on Windows/WebView2. Proves real IPC round-trips against scratch copies of committed test fixtures. One spec reads this machine's own real, read-only RimWorld/Workshop/`ModsConfig.xml`; it never writes to them. | **No — local/pre-release only** |
 
-Run the CDP smoke tier locally before a release, or after touching
+On Windows, run the CDP smoke tier locally before a release, or after touching
 `apply`, project loading, or anything else it exercises:
 
 ```sh
@@ -102,9 +103,11 @@ bun run e2e:smoke
 ```
 
 It takes a few minutes (a full `cargo build` of `rimmerge-desktop` the
-first time) and needs a real desktop session with WebView2 on Windows or
-WebKitGTK on Linux. It is not part of CI, which runs the mock-IPC Playwright
-tier plus the Vitest suite.
+first time) and needs a Windows desktop session with WebView2. Its current
+configuration uses WebView2 flags and CDP; it does not attach to Linux
+WebKitGTK. Linux needs a separate manual smoke with disposable fixtures
+(see [install.md](../../docs/install.md#linux-support-boundary)). CI runs
+the browser mock-IPC tier plus Vitest, which do not validate the native webview.
 
 ## License
 

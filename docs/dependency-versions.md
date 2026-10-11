@@ -8,8 +8,7 @@ snapshot plus the reasoning behind every deliberate pin.
 ## Toolchain
 
 `rust-toolchain.toml` pins `channel = "stable"` (resolves to whatever
-stable is installed on the host; the current CI runner remains
-Windows/MSVC, while Linux development uses the same stable channel).
+stable is installed on the host; CI runs on Windows/MSVC and Linux GNU).
 The reference toolchain is `rustc 1.98.1`; `rust-version` in
 `Cargo.toml` floors it at `1.98`.
 
@@ -21,10 +20,13 @@ Tagged releases ship the following artifacts, built by `.github/workflows/releas
 |---|---|---|
 | Windows | `Rimmerge-<ver>-windows-x64-portable.zip` | Desktop (`Rimmerge.exe`) + CLI (`cli\\rimmerge.exe`) + licenses |
 | Windows | `rimmerge-cli-<ver>-x86_64-pc-windows-msvc.zip` | CLI only |
-| Linux | `rimmerge_<ver>_amd64.deb` | Tauri-built `.deb` package (install via `sudo apt install ./...`) |
-| Linux | `Rimmerge_<ver>_amd64.AppImage` | Self-contained AppImage (run via `chmod +x ... && ./...`) |
+| Linux | `Rimmerge_<ver>_amd64.deb` | Desktop + `/usr/bin/rimmerge` CLI + MIT/Apache licenses |
+| Linux | `Rimmerge_<ver>_amd64.AppImage` | Desktop AppImage + licenses (Ubuntu 24.04 x86_64 baseline) |
 | Linux | `Rimmerge-<ver>-linux-x64-portable.tar.gz` | Desktop + CLI + licenses, portable tarball |
 | Linux | `rimmerge-cli-<ver>-x86_64-unknown-linux-gnu.tar.gz` | CLI only |
+
+Linux release packaging is pinned to `ubuntu-24.04` (x86_64); runtime
+validation and Flatpak/Proton boundaries are documented in [install.md](install.md#linux-support-boundary).
 
 All release artifacts are accompanied by `SHA256SUMS.txt`; verify with
 `sha256sum -c SHA256SUMS.txt` (bash) or

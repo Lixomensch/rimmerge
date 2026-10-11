@@ -1,22 +1,22 @@
 # Install
 
-Prebuilt releases ship for Windows and Linux. See the artifact table in
+The release workflow builds Windows and Linux artifacts. See the artifact table in
 [docs/dependency-versions.md](dependency-versions.md#release-artifacts) for the full
 list of files on each platform.
 
 ## Getting Rimmerge
 
-**Prebuilt releases.** Tagged releases ship the following GitHub Release
-assets on
+**Prebuilt releases.** The tagged-release workflow prepares these assets in a
+draft release; use the published assets available on
 [github.com/Rimmerge-Project/rimmerge/releases](https://github.com/Rimmerge-Project/rimmerge/releases):
 
 - **Windows**: `Rimmerge-<version>-windows-x64-portable.zip` (the desktop
   app `Rimmerge.exe`, the CLI `cli\rimmerge.exe`, and the licenses), a
   CLI-only zip.
-- **Linux**: `Rimmerge_<version>_amd64.deb` (Debian/Ubuntu package),
-  `Rimmerge_<version>_amd64.AppImage` (self-contained, runs on any
-  modern Linux), `Rimmerge-<version>-linux-x64-portable.tar.gz` (desktop +
-  CLI, extract anywhere), and a CLI-only tarball.
+- **Linux**: `Rimmerge_<version>_amd64.deb` (desktop, CLI and licenses),
+  `Rimmerge_<version>_amd64.AppImage` (desktop and licenses),
+  `Rimmerge-<version>-linux-x64-portable.tar.gz` (desktop + CLI, extract
+  anywhere), and a CLI-only tarball.
 
 All artifacts come with `SHA256SUMS.txt`.
 
@@ -25,20 +25,20 @@ All artifacts come with `SHA256SUMS.txt`.
 2. Run `Rimmerge.exe`. There is no installer: Rimmerge writes nothing
    to the extracted folder, the registry, or Program Files.
 
-**Linux — `.deb` package (Debian/Ubuntu):**
+**Linux — `.deb` package (Ubuntu 24.04 x86_64 baseline):**
 ```sh
 sudo apt install ./Rimmerge_<version>_amd64.deb
 ```
 The app appears in your launcher as *Rimmerge*; the CLI (`rimmerge`) is
 installed to `/usr/bin`.
 
-**Linux — AppImage (any distribution):**
+**Linux — AppImage (see the support boundary below):**
 ```sh
 chmod +x Rimmerge_<version>_amd64.AppImage
 ./Rimmerge_<version>_amd64.AppImage
 ```
 
-**Linux — portable tarball (any distribution):**
+**Linux — portable tarball (see the support boundary below):**
 ```sh
 tar -xzf Rimmerge-<version>-linux-x64-portable.tar.gz
 cd Rimmerge-<version>-linux-x64-portable
@@ -61,7 +61,8 @@ sudo apt install build-essential curl file libayatana-appindicator3-dev \
   libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget
 ```
 
-The Tauri window works with both X11 and Wayland sessions. Run
+Native smoke validation in X11 and Wayland remains required before claiming
+session support. Run
 `bun run tauri dev` from `apps/desktop` in the session you want to validate;
 the native folder/file dialogs use `tauri-plugin-dialog` and require the
 `dialog:allow-open` and `dialog:allow-save` capabilities already committed
@@ -98,9 +99,11 @@ folders under `%LOCALAPPDATA%`:
 
 Moving the folder or extracting a newer release over it keeps both.
 
-**Uninstalling.** Delete the extracted folder. To remove your data as
-well, also delete both folders above. The app never copies itself
-elsewhere and never runs at startup.
+**Uninstalling.** For the `.deb`, run `sudo apt remove rimmerge`. For a
+portable archive or AppImage, delete the extracted folder or file. To remove
+your data as well, also delete both folders above. Portable packages do not
+install themselves elsewhere; the `.deb` installs its files through the
+package manager. The app does not run at startup.
 
 **Building from source needs the `rules` submodule checked out.**
 Rimmerge embeds a snapshot of its
@@ -133,13 +136,22 @@ Tauri requires an MSVC host and WebView2; on Linux use the WebKitGTK packages
 listed above and an X11 or Wayland session, plus
 [Bun](https://bun.sh).
 
+Use Bun **1.4.0** and the frozen lockfile. Build the CLI first: Linux
+Debian bundling reads `target/release/rimmerge` from the workspace root.
+The release workflow uses the default target directory.
+
 ```sh
+cargo build --release -p rimmerge-cli
 cd apps/desktop
-bun install
+bun install --frozen-lockfile
 bun run tauri build
-# executable at target/release/rimmerge-desktop[.exe] (bundling is off:
-# no installer is produced)
+# executable at target/release/rimmerge-desktop[.exe]
+# Windows: no installer. Linux: .deb and AppImage bundles.
 ```
+
+For development without packaging, use `bun run tauri build --debug --no-bundle`.
+Build release AppImages on Ubuntu 24.04; other build hosts are not validation
+for the supported packaging baseline.
 
 `bun run tauri dev` runs it without a release build, for
 day-to-day development — see
@@ -199,16 +211,47 @@ A path only counts as "the game folder" once it has both `Version.txt`
 and a `Data/Core/` subfolder; the same check backs both detection and
 every test that needs a real install.
 
-The workshop folder and `ModsConfig.xml` follow the identical ladder
-(`RIMMERGE_WORKSHOP_DIR`/`RIMMERGE_MODS_CONFIG`, then `config.json`,
-then a game-folder-relative default).
+Workshop and `ModsConfig.xml` also support explicit paths,
+`RIMMERGE_WORKSHOP_DIR`/`RIMMERGE_MODS_CONFIG` and `config.json`. Workshop
+discovery defaults to the game's Steam library. On Linux, ModsConfig discovery
+checks native Unity config, Flatpak Steam config, then existing Proton prefixes
+in the Steam roots and libraries listed by `libraryfolders.vdf`.
+The native Unity config directory is
+`~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config`; it does
+not move with `XDG_CONFIG_HOME`. Rimmerge's own profile data respects
+`XDG_DATA_HOME`. Explicit paths remain available for other layouts.
 
-**Platform support today**: prebuilt Rimmerge releases ship for both
-Windows and Linux. Linux packages include native RimWorld paths, XDG/HOME
-profile data, Linux executables and Steam Proton routing. The desktop app
-requires the WebKitGTK dependencies listed above at runtime (they are
-declared as package dependencies in the `.deb`; the AppImage and tarball
-need them pre-installed).
+## Linux support boundary
+
+| Target | Initial packaging baseline | Formats |
+| --- | --- | --- |
+| Linux GNU x86_64 / amd64 | Ubuntu 24.04 LTS | Desktop + CLI portable tarball, CLI tarball, `.deb`, desktop AppImage |
+
+Release builds use Ubuntu 24.04, the oldest supported packaging baseline.
+Other distributions, older glibc versions and other architectures are not
+promised. Compatibility still requires a native runtime smoke on the target
+system; browser mock tests do not validate WebKitGTK, file dialogs or handlers.
+X11 and Wayland smoke evidence is pending; neither session has been declared
+validated by the Linux fixture tests alone.
+
+The `.deb` declares WebKitGTK 4.1 and GTK dependencies. The desktop portable
+tarball requires compatible system libraries. AppImage bundles libraries, but
+still depends on compatible host facilities; on Ubuntu 24.04, FUSE 2 is provided
+by `sudo apt install libfuse2t64` (see the
+[Ubuntu package](https://packages.ubuntu.com/noble/libfuse2t64)). The CLI can
+also be downloaded separately.
+Both licenses are in the desktop tarball, `.deb` and AppImage. See
+[Tauri's Debian guidance](https://v2.tauri.app/distribute/debian/) and
+[AppImage guidance](https://v2.tauri.app/distribute/appimage/).
+
+Native layouts use `RimWorldLinux` and `RimWorldLinux_Data`. Flatpak Steam
+and Proton discovery covers common paths and secondary Steam libraries;
+Rimmerge itself is not distributed as a Flatpak, and sandbox access or a
+particular Wine prefix is not guaranteed. Windows `.exe` files on Linux are
+launched through Steam, never directly. A Windows build running through Wine
+is distinct from the native build and has no verified Wine-to-native launch
+route. Validate launch and running-game refusal using disposable fixtures,
+without launching a real game in automated tests.
 
 ## `config.json`
 
