@@ -153,7 +153,7 @@ Windows:
 pwsh ./scripts/package-portable.ps1 -Version 1.0.0 -OutDir out
 ```
 
-Linux (after `bun run tauri build -- --bundles deb,appimage`):
+Linux (after `bun run tauri build`):
 ```sh
 pwsh ./scripts/package-linux.ps1 -Version 1.0.0 -OutDir out
 ```

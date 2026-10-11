@@ -11,7 +11,7 @@
 #
 # Prerequisites (this script builds nothing):
 #   cargo build --release -p rimmerge-cli
-#   (cd apps/desktop && bun run tauri build -- --bundles deb,appimage)
+#   (cd apps/desktop && bun run tauri build)
 #
 # Usage:
 #   pwsh ./scripts/package-linux.ps1 -Version 1.0.0 [-OutDir <dir>] [-TargetDir <dir>]
@@ -58,7 +58,7 @@ $debPattern      = Join-Path $TargetDir "bundle/deb/rimmerge_${Version}_amd64.de
 $appimagePattern = Join-Path $TargetDir "bundle/appimage/Rimmerge_${Version}_amd64.AppImage"
 foreach ($bundleFile in @($debPattern, $appimagePattern)) {
     if (-not (Test-Path -LiteralPath $bundleFile)) {
-        throw "missing $bundleFile - run: bun run tauri build -- --bundles deb,appimage"
+        throw "missing $bundleFile - run: bun run tauri build"
     }
 }
 

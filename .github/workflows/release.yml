@@ -125,7 +125,7 @@ jobs:
 
       - name: bun run tauri build (Linux — deb + AppImage bundles)
         if: runner.os == 'Linux'
-        run: bun run tauri build -- --bundles deb,appimage
+        run: bun run tauri build
 
       # Built once per platform. On Windows: rimmerge.exe.
       # On Linux: rimmerge (ELF, no extension).
