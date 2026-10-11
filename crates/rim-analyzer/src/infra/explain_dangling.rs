@@ -872,7 +872,7 @@ mod tests {
 
     /// Regression: a candidate file that fails to read (here, a genuine
     /// OS-level sharing violation — the file is held open with exclusive
-    /// access for the whole search, on this Windows-only workspace) must
+    /// access on Windows, or removed after discovery on Unix) must
     /// leave the search incomplete, exactly like running out of budget —
     /// never a silently-skipped candidate that lets the search "complete"
     /// and wrongly declare a name `DefinedNowhere` when it might be
@@ -900,13 +900,6 @@ mod tests {
             .open(&unreadable)
             .expect("open with exclusive access");
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000))
-                .expect("make unreadable");
-        }
-
         let inactive_mod = crate::domain::InactiveMod {
             id: ModId::new("dormant"),
             name: "Dormant".to_string(),
@@ -921,15 +914,23 @@ mod tests {
         let scan = empty_scan(Vec::new(), vec![inactive_mod]);
         let mut conflicts = vec![unexplained_conflict("LockedGhostDef")];
 
-        explain_dangling_references(&mut conflicts, &scan);
+        let candidates = CandidateFiles::collect(&scan);
+        assert_eq!(
+            candidates.files.len(),
+            1,
+            "the unreadable file was discovered"
+        );
+        // Removal after discovery fails at read time even when tests run as root.
+        #[cfg(not(windows))]
+        fs::remove_file(&unreadable).expect("remove discovered candidate");
+        explain_within_budget(&mut conflicts, &candidates, MAX_EXPLAIN_BYTES);
+        assert_eq!(
+            cause_of(&conflicts, "LockedGhostDef"),
+            DanglingCause::Unexplained
+        );
 
         #[cfg(windows)]
         drop(_exclusive_lock);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644)).ok();
-        }
         fs::remove_dir_all(inactive_dir).ok();
     }
 }

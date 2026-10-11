@@ -3,7 +3,7 @@
 //! refuses to write `ModsConfig.xml` out from under a live game, so the
 //! process-list scan and its exact match rule live in exactly one place.
 
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// Process names used by native Linux, Linux x86_64 and Windows/Proton builds.
 pub(crate) const RIMWORLD_PROCESS_NAMES: &[&str] =
@@ -13,6 +13,34 @@ fn is_rimworld_process_name(name: &str) -> bool {
     RIMWORLD_PROCESS_NAMES
         .iter()
         .any(|candidate| name.eq_ignore_ascii_case(candidate))
+}
+
+fn is_rimworld_process(process: &sysinfo::Process) -> bool {
+    is_rimworld_process_identity(
+        &process.name().to_string_lossy(),
+        process.exe().and_then(std::path::Path::file_name),
+    )
+}
+
+fn is_rimworld_process_identity(name: &str, executable_name: Option<&std::ffi::OsStr>) -> bool {
+    if let Some(executable_name) = executable_name {
+        return is_rimworld_process_name(&executable_name.to_string_lossy());
+    }
+    if is_rimworld_process_name(name) {
+        return true;
+    }
+    // Linux exposes at most 15 bytes of comm. No generic prefix matching:
+    // these aliases apply only when the executable path is unavailable.
+    #[cfg(target_os = "linux")]
+    {
+        ["RimWorldLinux.x", "RimWorldWin64.ex"]
+            .iter()
+            .any(|known| name.eq_ignore_ascii_case(known))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
 }
 
 /// Probes whether RimWorld's own process is currently running. A trait
@@ -25,9 +53,7 @@ pub trait GameProcessProbe: Send + Sync {
 }
 
 /// The real probe: checks the live process list via `sysinfo`, refreshing
-/// only what's needed to read each process's name
-/// (`ProcessRefreshKind::nothing()` — no memory/cpu/disk/exe-path work
-/// sysinfo would otherwise do per process).
+/// only process names and executable paths, without memory/cpu/disk work.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SysinfoGameProcessProbe;
 
@@ -46,12 +72,9 @@ impl GameProcessProbe for SysinfoGameProcessProbe {
         system.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
-            ProcessRefreshKind::nothing(),
+            ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
         );
-        system
-            .processes()
-            .values()
-            .any(|process| is_rimworld_process_name(process.name().to_string_lossy().as_ref()))
+        system.processes().values().any(is_rimworld_process)
     }
 }
 
@@ -81,11 +104,103 @@ mod tests {
         assert!(!is_rimworld_process_name("RimWorld"));
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn truncated_names_are_only_a_fallback_for_missing_executable_paths() {
+        for name in ["RimWorldLinux.x", "RimWorldWin64.ex"] {
+            assert!(is_rimworld_process_identity(name, None));
+            assert!(!is_rimworld_process_identity(
+                name,
+                Some(std::ffi::OsStr::new("unrelated"))
+            ));
+        }
+        for name in [
+            "RimWorldLinux.xy",
+            "RimWorldLinux.x-backup",
+            "RimWorldWin64",
+            "RimWorld",
+        ] {
+            assert!(!is_rimworld_process_identity(name, None));
+        }
+        assert!(is_rimworld_process_identity(
+            "unrelated",
+            Some(std::ffi::OsStr::new("RimWorldLinux.x86_64"))
+        ));
+    }
+
     #[test]
     fn the_real_probe_does_not_panic_scanning_this_machines_process_list() {
         // Doesn't assert a value (whether RimWorld happens to be running
         // on the test machine is undefined) — just proves the scan itself
         // completes without panicking, on every CI/dev machine.
         let _ = SysinfoGameProcessProbe::new().is_running();
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "helper started only by the synthetic process regression"]
+    fn synthetic_process_child() {
+        use std::io::Write;
+        println!("synthetic-ready");
+        std::io::stdout().flush().expect("flush ready");
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .expect("wait for parent");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn detects_synthetic_executables_despite_linux_name_truncation() {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Child, Command, Stdio};
+        struct ChildGuard(Child);
+        impl Drop for ChildGuard {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let dir = tempfile::tempdir().expect("scratch");
+        for (name, expected) in [
+            ("RimWorldLinux.x86_64", true),
+            ("RimWorldWin64.exe", true),
+            ("RimWorldLinux.x86_64-backup", false),
+            ("unrelated", false),
+        ] {
+            let executable = dir.path().join(name);
+            std::fs::copy(std::env::current_exe().expect("test binary"), &executable)
+                .expect("copy synthetic helper");
+            let mut child = ChildGuard(
+                Command::new(&executable)
+                    .args([
+                        "--exact",
+                        "process::tests::synthetic_process_child",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("synthetic child"),
+            );
+            let output = BufReader::new(child.0.stdout.take().expect("stdout"));
+            assert!(
+                output
+                    .lines()
+                    .any(|line| line.expect("ready line") == "synthetic-ready")
+            );
+            let mut system = System::new();
+            let pid = sysinfo::Pid::from_u32(child.0.id());
+            system.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&[pid]),
+                true,
+                ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+            );
+            let process = system.process(pid).expect("synthetic process present");
+            assert_eq!(is_rimworld_process(process), expected, "{name}");
+            if expected {
+                assert!(process.name().as_encoded_bytes().len() <= 15);
+            }
+        }
     }
 }

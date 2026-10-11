@@ -106,11 +106,8 @@ fn executable_command(executable: &GameExecutable) -> Command {
 const EXECUTABLE_CANDIDATES: &[GameExecutableName] = &[GameExecutableName::Windows];
 
 #[cfg(not(windows))]
-const EXECUTABLE_CANDIDATES: &[GameExecutableName] = &[
-    GameExecutableName::LinuxX86_64,
-    GameExecutableName::Linux,
-    GameExecutableName::Windows,
-];
+const EXECUTABLE_CANDIDATES: &[GameExecutableName] =
+    &[GameExecutableName::LinuxX86_64, GameExecutableName::Linux];
 
 fn find_executable(game_dir: &Path) -> Option<GameExecutable> {
     EXECUTABLE_CANDIDATES.iter().copied().find_map(|name| {
@@ -184,6 +181,7 @@ mod tests {
         assert_eq!(route, Ok(LaunchRoute::Steam));
     }
 
+    #[cfg(windows)]
     #[test]
     fn route_is_executable_for_an_install_with_the_exe() {
         let install = install_with_executable();
@@ -196,6 +194,20 @@ mod tests {
             Ok(LaunchRoute::Executable(GameExecutable::of_install(
                 install.path()
             )))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn windows_executable_requires_a_steam_route_on_linux() {
+        let install = install_with_executable();
+        assert_eq!(
+            SystemGameLauncher::with_steam_check(never_steam).route(install.path()),
+            Err(LaunchUnavailable::ExecutableMissing)
+        );
+        assert_eq!(
+            SystemGameLauncher::with_steam_check(always_steam).route(install.path()),
+            Ok(LaunchRoute::Steam)
         );
     }
 
@@ -219,6 +231,25 @@ mod tests {
             Ok(LaunchRoute::Executable(GameExecutable::of_install_named(
                 install.path(),
                 GameExecutableName::LinuxX86_64
+            )))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn route_uses_the_other_native_executable_when_x86_64_is_not_executable() {
+        let install = install_with_linux_executable(GameExecutableName::Linux, 0o755);
+        use std::os::unix::fs::PermissionsExt;
+        let candidate = install
+            .path()
+            .join(GameExecutableName::LinuxX86_64.filename());
+        fs::write(&candidate, b"ELF").expect("non executable candidate");
+        fs::set_permissions(candidate, fs::Permissions::from_mode(0o644)).expect("permissions");
+        assert_eq!(
+            SystemGameLauncher::with_steam_check(never_steam).route(install.path()),
+            Ok(LaunchRoute::Executable(GameExecutable::of_install_named(
+                install.path(),
+                GameExecutableName::Linux
             )))
         );
     }

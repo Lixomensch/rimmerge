@@ -116,34 +116,40 @@ pub fn default_mods_config_path() -> Result<PathBuf> {
 #[cfg(not(windows))]
 pub fn default_mods_config_path() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME environment variable is not set")?;
-    let home_path = PathBuf::from(home);
+    Ok(default_mods_config_path_from(
+        Path::new(&home),
+        &default_steam_roots(),
+    ))
+}
 
-    let native = home_path
-        .join(".config")
-        .join("unity3d")
-        .join("Ludeon Studios")
-        .join("RimWorld by Ludeon Studios")
-        .join("Config")
-        .join("ModsConfig.xml");
-
-    if native.is_file() {
-        return Ok(native);
-    }
-
-    // Check common Proton / Wine Steam Play prefix paths
-    let proton_candidates = [
-        home_path.join(".local/share/Steam/steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"),
-        home_path.join(".steam/steam/steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"),
-    ];
-
-    for candidate in proton_candidates {
+#[cfg(not(windows))]
+fn default_mods_config_path_from(home: &Path, steam_roots: &[PathBuf]) -> PathBuf {
+    let unity =
+        Path::new("unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+    let native = home.join(".config").join(unity);
+    let flatpak = home
+        .join(".var/app/com.valvesoftware.Steam/.config")
+        .join(unity);
+    for candidate in [&native, &flatpak] {
         if candidate.is_file() {
-            return Ok(candidate);
+            return candidate.clone();
         }
     }
-
-    // Default to the native path
-    Ok(native)
+    let mut libraries = Vec::new();
+    for root in steam_roots {
+        libraries.push(root.clone());
+        let vdf = root.join("steamapps/libraryfolders.vdf");
+        if let Some(text) = read_bounded_regular_file(&vdf, STEAM_LIBRARY_LIST_MAX_BYTES) {
+            libraries.extend(steam_library_dirs(&text));
+        }
+    }
+    for library in dedup_preserving_order(libraries) {
+        let candidate = library.join("steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    native
 }
 
 /// The game version from `<game_dir>/Version.txt`'s first two components.
@@ -1298,5 +1304,45 @@ mod tests {
             is_steam_managed_install_under(&game_dir, &[valid_root]),
             "sanity: the same library is managed once the list is readable"
         );
+    }
+    #[cfg(not(windows))]
+    #[test]
+    fn mods_config_discovery_prefers_native_then_flatpak_then_proton_libraries() {
+        let scratch = Scratch::new("mods-config");
+        let home = scratch.path().join("home");
+        let steam = home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam");
+        let secondary = scratch.path().join("secondary");
+        write_library_list(
+            &steam,
+            &libraryfolders_vdf(&[display(&secondary), display(&secondary)]),
+        );
+        let native = home.join(
+            ".config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml",
+        );
+        let flatpak = home.join(".var/app/com.valvesoftware.Steam/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        let proton = secondary.join("steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        let root_proton = steam.join("steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        assert_eq!(
+            default_mods_config_path_from(&home, std::slice::from_ref(&steam)),
+            native
+        );
+        for file in [&proton, &root_proton, &flatpak, &native] {
+            std::fs::create_dir_all(file.parent().expect("parent")).expect("config dir");
+            std::fs::write(file, "<ModsConfigData/>").expect("synthetic config");
+        }
+        for expected in [&native, &flatpak, &root_proton, &proton] {
+            assert_eq!(
+                default_mods_config_path_from(&home, std::slice::from_ref(&steam)),
+                *expected
+            );
+            std::fs::remove_file(expected).expect("remove selected candidate");
+        }
+        // A directory at the config path is not a readable config file.
+        std::fs::create_dir_all(&proton).expect("directory instead of file");
+        assert_eq!(
+            default_mods_config_path_from(&home, std::slice::from_ref(&steam)),
+            native
+        );
+        assert_eq!(default_mods_config_path_from(&home, &[]), native);
     }
 }
