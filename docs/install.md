@@ -13,7 +13,7 @@ assets on
 - **Windows**: `Rimmerge-<version>-windows-x64-portable.zip` (the desktop
   app `Rimmerge.exe`, the CLI `cli\rimmerge.exe`, and the licenses), a
   CLI-only zip.
-- **Linux**: `rimmerge_<version>_amd64.deb` (Debian/Ubuntu package),
+- **Linux**: `Rimmerge_<version>_amd64.deb` (Debian/Ubuntu package),
   `Rimmerge_<version>_amd64.AppImage` (self-contained, runs on any
   modern Linux), `Rimmerge-<version>-linux-x64-portable.tar.gz` (desktop +
   CLI, extract anywhere), and a CLI-only tarball.
@@ -27,7 +27,7 @@ All artifacts come with `SHA256SUMS.txt`.
 
 **Linux — `.deb` package (Debian/Ubuntu):**
 ```sh
-sudo apt install ./rimmerge_<version>_amd64.deb
+sudo apt install ./Rimmerge_<version>_amd64.deb
 ```
 The app appears in your launcher as *Rimmerge*; the CLI (`rimmerge`) is
 installed to `/usr/bin`.

@@ -1,7 +1,7 @@
 # Builds Linux release artifacts from already-built release binaries:
 #   Rimmerge-<version>-linux-x64-portable.tar.gz      desktop app + CLI + licenses
 #   rimmerge-cli-<version>-x86_64-unknown-linux-gnu.tar.gz  the CLI binary alone
-#   rimmerge_<version>_amd64.deb                       Tauri-generated .deb package
+#   Rimmerge_<version>_amd64.deb                       Tauri-generated .deb package
 #   Rimmerge_<version>_amd64.AppImage                  Tauri-generated AppImage
 #
 # The .deb and AppImage are already built by `tauri build --bundles deb,appimage`
@@ -25,7 +25,7 @@
 #     LICENSE-MIT, LICENSE-APACHE
 #
 # Tauri-generated bundles are copied verbatim from their own output paths:
-#   target/release/bundle/deb/rimmerge_<version>_amd64.deb
+#   target/release/bundle/deb/Rimmerge_<version>_amd64.deb
 #   target/release/bundle/appimage/Rimmerge_<version>_amd64.AppImage
 #
 # Fails if any expected binary is missing and removes any partial output on
@@ -54,7 +54,7 @@ foreach ($required in @($desktopBin, $cliBin)) {
 
 # Locate the Tauri-generated bundles (paths are version-dependent and
 # Tauri writes them relative to target/release/bundle/).
-$debPattern      = Join-Path $TargetDir "bundle/deb/rimmerge_${Version}_amd64.deb"
+$debPattern      = Join-Path $TargetDir "bundle/deb/Rimmerge_${Version}_amd64.deb"
 $appimagePattern = Join-Path $TargetDir "bundle/appimage/Rimmerge_${Version}_amd64.AppImage"
 foreach ($bundleFile in @($debPattern, $appimagePattern)) {
     if (-not (Test-Path -LiteralPath $bundleFile)) {
@@ -72,7 +72,7 @@ New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $resolvedOut  = (Resolve-Path -LiteralPath $OutDir).Path
 $tarball      = Join-Path $resolvedOut "$portableName.tar.gz"
 $cliTarball   = Join-Path $resolvedOut "$cliName.tar.gz"
-$outDeb       = Join-Path $resolvedOut "rimmerge_${Version}_amd64.deb"
+$outDeb       = Join-Path $resolvedOut "Rimmerge_${Version}_amd64.deb"
 $outAppImage  = Join-Path $resolvedOut "Rimmerge_${Version}_amd64.AppImage"
 
 $readme = @"
