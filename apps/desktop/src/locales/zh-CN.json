@@ -1942,7 +1942,7 @@
       "chooseButton": "选择…",
       "installCheckboxLabel": "安装到 Mods 文件夹并启用",
       "staleActiveSetNote": "未包含待定的启用状态更改——如果希望本次安装包含它们，请先重新扫描。",
-      "forceWarning": "RimWorldWin64.exe 似乎正在运行。现在安装会写入 ModsConfig.xml，而游戏退出时会覆盖该文件，因此这次更改可能会丢失。仍然导出？",
+      "forceWarning": "RimWorld 似乎正在运行。现在安装会写入 ModsConfig.xml，而游戏退出时会覆盖该文件，因此这次更改可能会丢失。仍然导出？",
       "exportAnyway": "仍然导出",
       "export": "导出",
       "exportedTo": "已导出到：{path}",

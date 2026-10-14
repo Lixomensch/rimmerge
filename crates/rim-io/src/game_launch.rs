@@ -1,7 +1,8 @@
 //! [`SystemGameLauncher`]: starts RimWorld, through Steam or by running the
 //! install's own executable.
 //!
-//! Neither route waits for the game, reads its output, or writes anything.
+//! Neither route blocks the caller until game exit or reads its output. Unix
+//! direct-launch children are reaped in the background.
 //! The Steam rule itself lives in `rim_analyzer::infra::paths`; this adapter
 //! only turns a route into an OS request.
 
@@ -14,7 +15,7 @@ use rim_session::ports::{
     GameExecutable, GameExecutableName, GameLauncher, LaunchFailure, LaunchRoute,
 };
 
-/// The link Windows hands to the Steam client already on this machine. A
+/// The link the OS hands to the Steam client already on this machine. A
 /// constant, never built from input; a test pins it to RimWorld's app id.
 const STEAM_RUN_URL: &str = "steam://run/294100";
 
@@ -74,13 +75,37 @@ impl GameLauncher for SystemGameLauncher {
         match route {
             LaunchRoute::Steam => open::that_detached(STEAM_RUN_URL)
                 .map_err(|error| LaunchFailure::SteamRefused(error.to_string())),
-            // Dropping the `Child` neither kills nor waits for the game.
-            LaunchRoute::Executable(executable) => executable_command(executable)
-                .spawn()
-                .map(drop)
-                .map_err(|error| LaunchFailure::SpawnFailed(error.to_string())),
+            LaunchRoute::Executable(executable) => {
+                spawn_executable(&mut executable_command(executable))
+                    .map_err(|error| LaunchFailure::SpawnFailed(error.to_string()))
+            }
         }
     }
+}
+
+#[cfg(unix)]
+fn spawn_executable(command: &mut Command) -> std::io::Result<()> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<std::process::Child>(1);
+    // Prepare the waiter before spawning so a thread failure cannot orphan a child.
+    std::thread::Builder::new()
+        .name("rimmerge-game-wait".into())
+        .spawn(move || {
+            if let Ok(mut child) = receiver.recv() {
+                let _ = child.wait();
+            }
+        })?;
+    let child = command.spawn()?;
+    sender.send(child).map_err(|error| {
+        let mut child = error.0;
+        let _ = child.kill();
+        let _ = child.wait();
+        std::io::Error::other("game waiter exited before accepting the child")
+    })
+}
+
+#[cfg(not(unix))]
+fn spawn_executable(command: &mut Command) -> std::io::Result<()> {
+    command.spawn().map(drop)
 }
 
 /// The command that runs `executable`: no arguments, no shell, started from
@@ -135,6 +160,108 @@ mod tests {
     use rim_session::ports::RIMWORLD_EXECUTABLE;
     use std::fs;
     use tempfile::TempDir;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "helper started only by the synthetic reaping regression"]
+    fn synthetic_launched_child() {
+        use std::io::Write;
+        println!("synthetic-pid={}", std::process::id());
+        std::io::stdout().flush().expect("pid");
+        let signal = std::path::PathBuf::from(
+            std::env::var_os("RIMMERGE_SYNTHETIC_EXIT").expect("exit signal"),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !signal.is_file() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "parent did not release the helper"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn direct_spawn_reaps_a_finished_synthetic_child_without_blocking_the_caller() {
+        use std::time::{Duration, Instant};
+        let dir = tempfile::tempdir().expect("scratch");
+        let executable = dir.path().join("RimWorldLinux.x86_64");
+        fs::copy(std::env::current_exe().expect("test binary"), &executable).expect("helper");
+        let output = dir.path().join("stdout");
+        let signal = dir.path().join("exit");
+        let mut command = executable_command(&GameExecutable::of_install_named(
+            dir.path(),
+            GameExecutableName::LinuxX86_64,
+        ));
+        command
+            .env("RIMMERGE_SYNTHETIC_EXIT", &signal)
+            .args([
+                "--exact",
+                "game_launch::tests::synthetic_launched_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .stdout(fs::File::create(&output).expect("output"));
+        spawn_executable(&mut command).expect("synthetic spawn");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let pid = loop {
+            let text = fs::read_to_string(&output).expect("helper output");
+            if let Some(pid) = text.split_inclusive('\n').find_map(|line| {
+                line.strip_prefix("synthetic-pid=")
+                    .and_then(|pid| pid.strip_suffix('\n'))
+                    .and_then(|pid| pid.parse::<u32>().ok())
+            }) {
+                break sysinfo::Pid::from_u32(pid);
+            }
+            assert!(Instant::now() < deadline, "helper did not publish its PID");
+            std::thread::sleep(Duration::from_millis(2));
+        };
+        let mut system = sysinfo::System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        assert_ne!(
+            system
+                .process(pid)
+                .expect("spawn returned while helper is alive")
+                .status(),
+            sysinfo::ProcessStatus::Zombie
+        );
+        fs::write(&signal, "exit").expect("release helper");
+        loop {
+            system.refresh_processes_specifics(
+                sysinfo::ProcessesToUpdate::Some(&[pid]),
+                true,
+                sysinfo::ProcessRefreshKind::nothing(),
+            );
+            if system.process(pid).is_none() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "finished child remains present (possibly zombie)"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    #[test]
+    fn direct_spawn_propagates_an_unavailable_executable() {
+        let dir = tempfile::tempdir().expect("scratch");
+        let mut command = executable_command(&GameExecutable::of_install_named(
+            dir.path(),
+            GameExecutableName::Linux,
+        ));
+        assert_eq!(
+            spawn_executable(&mut command)
+                .expect_err("no helper executable")
+                .kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
 
     fn never_steam(_: &Path) -> bool {
         false

@@ -13,29 +13,27 @@ use sha2::{Digest, Sha256};
 /// same path hash identically.
 const EXTENDED_PREFIX: &str = r"\\?\";
 
-/// Normalizes `path` into the text [`profile_dir`] hashes: canonicalized
-/// when it exists on disk (resolving `.`/`..` and symlinks), with the
-/// Windows extended-length prefix stripped, backslashes turned to
-/// forward slashes, and lowercased — so two spellings of the same
-/// `ModsConfig.xml` (different case, different slash direction, a
-/// not-yet-canonical relative path) always hash to the same profile.
-/// Falling back to `path` unchanged (still normalized the same way) when
-/// canonicalization fails (the path doesn't exist yet) is a best effort:
-/// it can't undo `.`/`..`/symlinks it can't see, but it does at least
-/// unify case and slash direction.
+/// Canonicalizes an existing config path before hashing. Windows also strips
+/// the extended prefix, normalizes separators and folds case. Unix preserves
+/// case and literal backslashes so distinct files have distinct profiles.
+/// If the file does not exist, its original spelling is used.
 fn normalize(path: &Path) -> String {
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let text = resolved.to_string_lossy();
-    let stripped = text.strip_prefix(EXTENDED_PREFIX).unwrap_or(&text);
-    let forward_slashes = stripped.replace('\\', "/");
-    forward_slashes.to_lowercase()
+    #[cfg(windows)]
+    {
+        let text = resolved.to_string_lossy();
+        let stripped = text.strip_prefix(EXTENDED_PREFIX).unwrap_or(&text);
+        stripped.replace('\\', "/").to_lowercase()
+    }
+    #[cfg(not(windows))]
+    {
+        resolved.to_string_lossy().into_owned()
+    }
 }
 
-/// `<base>/profiles/<first 12 hex chars of sha256(normalized mods_config
-/// path)>/` — stable for a given `mods_config` path regardless of case,
-/// slash direction, or `\\?\`-prefixed canonical spelling (so re-running
-/// against the same install always finds the same profile), and distinct
-/// across installs.
+/// `<base>/profiles/<first 12 hex chars of sha256(normalized config path)>/`.
+/// Stable for aliases of the same existing file. Case/separator variants are
+/// equivalent only on Windows; Unix paths remain distinct.
 #[must_use]
 pub fn profile_dir(base: &Path, mods_config: &Path) -> PathBuf {
     let mut hasher = Sha256::new();
@@ -150,6 +148,7 @@ mod tests {
     /// Case and slash-direction variants of a path that doesn't exist on
     /// disk can't be resolved by `canonicalize`, so this exercises the
     /// fallback normalization (lowercase + forward slashes) on its own.
+    #[cfg(windows)]
     #[test]
     fn case_and_slash_variants_of_a_nonexistent_path_map_to_one_profile() {
         let base = Path::new("base");
@@ -166,6 +165,7 @@ mod tests {
     /// resolves whatever case/slash spelling was given down to one
     /// on-disk form, so a case/slash variant hashes identically even
     /// before the fallback normalization ever runs.
+    #[cfg(windows)]
     #[test]
     fn case_and_slash_variants_of_an_existing_path_map_to_one_profile() {
         let dir = tempdir().expect("tempdir");
@@ -183,6 +183,30 @@ mod tests {
             profile_dir(Path::new("base"), &file),
             profile_dir(Path::new("base"), &variant)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_profiles_distinguish_case_and_literal_backslashes() {
+        let dir = tempdir().expect("scratch");
+        let upper = dir.path().join("ModsConfig.xml");
+        let lower = dir.path().join("modsconfig.xml");
+        for file in [&upper, &lower] {
+            std::fs::write(file, b"<ModsConfigData/>").expect("config");
+        }
+        let base = dir.path().join("profiles-base");
+        assert_ne!(profile_dir(&base, &upper), profile_dir(&base, &lower));
+        assert_ne!(
+            profile_dir(&base, Path::new("Folder/ModsConfig.xml")),
+            profile_dir(&base, Path::new("folder/ModsConfig.xml"))
+        );
+        assert_ne!(
+            profile_dir(&base, Path::new(r"Folder\ModsConfig.xml")),
+            profile_dir(&base, Path::new("Folder/ModsConfig.xml"))
+        );
+        let alias = dir.path().join("config-alias");
+        std::os::unix::fs::symlink(&upper, &alias).expect("alias");
+        assert_eq!(profile_dir(&base, &upper), profile_dir(&base, &alias));
     }
 
     // -- databases_dir --------------------------------------------------

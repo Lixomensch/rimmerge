@@ -1942,7 +1942,7 @@
       "chooseButton": "Choisir…",
       "installCheckboxLabel": "Installer dans Mods et activer",
       "staleActiveSetNote": "Les modifications d’activation en attente ne sont pas incluses : réanalysez d’abord si vous voulez qu’elles figurent dans cette installation.",
-      "forceWarning": "RimWorldWin64.exe semble être en cours d’exécution. Si vous installez maintenant, ModsConfig.xml sera écrit, or le jeu l’écrase en quittant : la modification risque donc d’être perdue. Exporter malgré tout ?",
+      "forceWarning": "RimWorld semble être en cours d’exécution. Si vous installez maintenant, ModsConfig.xml sera écrit, or le jeu l’écrase en quittant : la modification risque donc d’être perdue. Exporter malgré tout ?",
       "exportAnyway": "Exporter malgré tout",
       "export": "Exporter",
       "exportedTo": "Exporté vers : {path}",

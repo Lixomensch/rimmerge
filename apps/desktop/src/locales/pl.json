@@ -1942,7 +1942,7 @@
       "chooseButton": "Wybierz…",
       "installCheckboxLabel": "Zainstaluj w folderze Mods i włącz",
       "staleActiveSetNote": "Oczekujące zmiany włączenia i wyłączenia modów nie są uwzględnione — jeśli mają trafić do tej instalacji, najpierw przeskanuj ponownie.",
-      "forceWarning": "Wygląda na to, że RimWorldWin64.exe jest uruchomiony. Instalacja w tej chwili zapisuje ModsConfig.xml, który gra nadpisuje przy zamykaniu, więc zmiana może zostać utracona. Wyeksportować mimo to?",
+      "forceWarning": "Wygląda na to, że RimWorld jest uruchomiony. Instalacja w tej chwili zapisuje ModsConfig.xml, który gra nadpisuje przy zamykaniu, więc zmiana może zostać utracona. Wyeksportować mimo to?",
       "exportAnyway": "Eksportuj mimo to",
       "export": "Eksportuj",
       "exportedTo": "Wyeksportowano do: {path}",

@@ -206,13 +206,18 @@ every test that needs a real install.
 
 Workshop and `ModsConfig.xml` also support explicit paths,
 `RIMMERGE_WORKSHOP_DIR`/`RIMMERGE_MODS_CONFIG` and `config.json`. Workshop
-discovery defaults to the game's Steam library. On Linux, ModsConfig discovery
-checks native Unity config, Flatpak Steam config, then existing Proton prefixes
-in the Steam roots and libraries listed by `libraryfolders.vdf`.
-The native Unity config directory is
-`~/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config`; it does
-not move with `XDG_CONFIG_HOME`. Rimmerge's own profile data respects
-`XDG_DATA_HOME`. Explicit paths remain available for other layouts.
+discovery defaults to the game's Steam library. Linux ModsConfig discovery uses
+the selected install's layout and registered Steam library: native Unity config,
+Flatpak Steam config for a Flatpak-managed native install, or the Proton prefix
+in that install's own library. Mixed layouts, conflicting native/Flatpak Steam
+ownership, unverifiable Steam records, missing configs and unknown contexts
+require an explicit config path.
+
+Native default discovery follows [Unity's Linux configuration convention](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Application-persistentDataPath.html) and checks
+`$XDG_CONFIG_HOME/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config`;
+when XDG_CONFIG_HOME is unset, empty or relative, it falls back to `$HOME/.config`.
+Rimmerge's own profile data uses an absolute XDG_DATA_HOME, otherwise
+`$HOME/.local/share`. Explicit overrides retain their existing precedence.
 
 ## Linux support boundary
 

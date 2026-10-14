@@ -14,6 +14,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-24.04]
     defaults:
       run:
         working-directory: apps/desktop
@@ -178,11 +179,13 @@ jobs:
       - name: vitest
         run: bun run test
 
-      - name: install Playwright's chromium
-        # `--with-deps` shells out to `apt-get` to install OS-level
-        # browser dependencies on Linux runners, and safely installs chromium
-        # on Windows.
+      - name: Install Playwright Chromium and Linux dependencies
+        if: runner.os == 'Linux'
         run: bunx playwright install chromium --with-deps
+
+      - name: Install Playwright Chromium on Windows
+        if: runner.os == 'Windows'
+        run: bunx playwright install chromium
 
       - name: Playwright, mock-IPC tier
         run: bun run e2e

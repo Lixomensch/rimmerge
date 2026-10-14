@@ -914,19 +914,24 @@ mod tests {
         let scan = empty_scan(Vec::new(), vec![inactive_mod]);
         let mut conflicts = vec![unexplained_conflict("LockedGhostDef")];
 
-        let candidates = CandidateFiles::collect(&scan);
-        assert_eq!(
-            candidates.files.len(),
-            1,
-            "the unreadable file was discovered"
-        );
-        // Removal after discovery fails at read time even when tests run as root.
+        #[cfg(windows)]
+        explain_dangling_references(&mut conflicts, &scan);
         #[cfg(not(windows))]
-        fs::remove_file(&unreadable).expect("remove discovered candidate");
-        explain_within_budget(&mut conflicts, &candidates, MAX_EXPLAIN_BYTES);
+        {
+            let candidates = CandidateFiles::collect(&scan);
+            assert_eq!(
+                candidates.files.len(),
+                1,
+                "the unreadable file was discovered"
+            );
+            // Removing after discovery also fails deterministically when run as root.
+            fs::remove_file(&unreadable).expect("remove discovered candidate");
+            explain_within_budget(&mut conflicts, &candidates, MAX_EXPLAIN_BYTES);
+        }
         assert_eq!(
             cause_of(&conflicts, "LockedGhostDef"),
-            DanglingCause::Unexplained
+            DanglingCause::Unexplained,
+            "a read failure must never be silently skipped into a false DefinedNowhere"
         );
 
         #[cfg(windows)]

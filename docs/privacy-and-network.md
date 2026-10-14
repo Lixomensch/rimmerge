@@ -165,8 +165,8 @@ The request it sends to the backend names no path or URL; the backend
 works out both from the configured install.
 
 - **A Steam copy** is started by handing the fixed link
-  `steam://run/294100` to Windows, which passes it to the Steam client
-  already installed on your computer. Rimmerge opens no connection and
+  `steam://run/294100` to the operating system, which passes it to the
+  Steam client already installed on your computer. Rimmerge opens no connection and
   contacts no host to do this: it isn't a web request, the two hosts
   above are still the only ones Rimmerge ever contacts, and the
   Internet access switch has nothing to block here.
@@ -175,9 +175,13 @@ works out both from the configured install.
   behaviour, outside Rimmerge and its settings.
 - **Any other copy** (GOG, a standalone folder, or a Steam copy whose
   library isn't listed in a default Steam root's `libraryfolders.vdf`)
-  is started by running `RimWorldWin64.exe` from the install folder,
-  with no arguments and no shell. Rimmerge doesn't wait for the game or
-  read its output.
+  is started from the install folder, with no arguments and no shell:
+  `RimWorldWin64.exe` on Windows, or `RimWorldLinux.x86_64` (preferred) /
+  `RimWorldLinux` on Linux. Direct launch requires a regular file rather
+  than a symlink, plus execute permission on Linux. Windows `.exe` files
+  on Linux require the verified Steam route instead. Launch returns
+  immediately and never reads game output; on Unix a background waiter
+  collects the child after it exits.
 
 Launching reads the install folder, Steam's own records of it
 (`appmanifest_294100.acf` and `libraryfolders.vdf`) and the list of

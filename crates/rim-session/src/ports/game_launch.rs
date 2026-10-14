@@ -44,8 +44,8 @@ impl GameExecutableName {
 
 /// The one executable a launch may start, derived from the install directory.
 ///
-/// The field is private and [`Self::of_install`] is the only constructor,
-/// so a launch route can never name any other program.
+/// The field is private; constructors only join the install directory with a
+/// filename from the closed [`GameExecutableName`] enum.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GameExecutable {
     path: PathBuf,

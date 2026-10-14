@@ -1942,7 +1942,7 @@
       "chooseButton": "Wählen…",
       "installCheckboxLabel": "In den Mods-Ordner installieren und aktivieren",
       "staleActiveSetNote": "Ausstehende Aktivierungsänderungen sind nicht enthalten – scanne zuerst erneut, wenn sie in diese Installation sollen.",
-      "forceWarning": "RimWorldWin64.exe scheint zu laufen. Eine Installation schreibt jetzt ModsConfig.xml, und das Spiel überschreibt diese Datei beim Beenden, daher kann die Änderung verloren gehen. Trotzdem exportieren?",
+      "forceWarning": "RimWorld scheint zu laufen. Eine Installation schreibt jetzt ModsConfig.xml, und das Spiel überschreibt diese Datei beim Beenden, daher kann die Änderung verloren gehen. Trotzdem exportieren?",
       "exportAnyway": "Trotzdem exportieren",
       "export": "Exportieren",
       "exportedTo": "Exportiert nach: {path}",

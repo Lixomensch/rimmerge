@@ -108,15 +108,18 @@ Rimmerge stays open.
 
 **How the game is started.** A Steam copy is started through Steam
 (`steam://run/294100`), so Steam's own launch settings apply. Any other copy
-(GOG, a standalone folder) starts `RimWorldWin64.exe` directly from the
-install folder, with no arguments. A copy counts as a Steam copy only when
-Steam's own record names that folder: the folder sits in a library's
+(GOG, a standalone folder) starts the install's executable directly, with no
+arguments: `RimWorldWin64.exe` on Windows, or `RimWorldLinux.x86_64`
+(preferred) / `RimWorldLinux` on Linux. The target must be a regular file,
+not a symlink; Linux also requires execute permission. A copy counts as a
+Steam copy only when Steam's own record names that folder: it sits in a library's
 `steamapps/common`, the library's `appmanifest_294100.acf` names it, and the
 library is listed in a default Steam root's `libraryfolders.vdf`. A folder
 copied out of Steam, or a backed-up library, is not mistaken for the real one
 (Steam would start a different folder). A Steam copy whose Steam is installed
-outside the default Program Files folders is started directly through
-`RimWorldWin64.exe`, since its library cannot be found.
+outside the default Steam roots uses direct launch when a valid native
+executable is available. On Linux, a Windows `.exe` is never launched
+directly; Proton copies require a verified Steam route.
 
 **What the button says.** It reads from the **selected** order and the last
 scan or apply, the same caveat as the strip: an edit made to `ModsConfig.xml`
@@ -136,8 +139,8 @@ every five seconds while the window is visible, and when you come back to it.
   uncheck "Write ModsConfig.xml" there, or close the dialog, nothing is
   launched.
 - **RimWorld is running** (disabled): the game is already up.
-- **Disabled with a note**: the install has no `RimWorldWin64.exe`, or the
-  status check failed (a short line says so). Until the first answer arrives
+- **Disabled with a note**: the install has no valid native executable or
+  verified Steam route, or the status check failed (a short line says so). Until the first answer arrives
   the button is disabled with no note. After that it shows the last answer,
   and a click first waits for a fresh one, which can wait behind a long
   command such as Verify; the button stays disabled meanwhile rather than

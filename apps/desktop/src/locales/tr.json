@@ -1942,7 +1942,7 @@
       "chooseButton": "Seç…",
       "installCheckboxLabel": "Mods klasörüne kur ve etkinleştir",
       "staleActiveSetNote": "Bekleyen etkinleştirme değişiklikleri dahil değil — bu kuruluma girmelerini istiyorsan önce yeniden tara.",
-      "forceWarning": "RimWorldWin64.exe çalışıyor görünüyor. Şimdi kurmak ModsConfig.xml dosyasına yazar; oyun kapanırken bu dosyanın üzerine yazdığı için değişiklik kaybolabilir. Yine de dışa aktarılsın mı?",
+      "forceWarning": "RimWorld çalışıyor görünüyor. Şimdi kurmak ModsConfig.xml dosyasına yazar; oyun kapanırken bu dosyanın üzerine yazdığı için değişiklik kaybolabilir. Yine de dışa aktarılsın mı?",
       "exportAnyway": "Yine de dışa aktar",
       "export": "Dışa aktar",
       "exportedTo": "Dışa aktarıldığı yer: {path}",

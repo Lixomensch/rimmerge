@@ -1942,7 +1942,7 @@
       "chooseButton": "Elegir…",
       "installCheckboxLabel": "Instalar en Mods y activar",
       "staleActiveSetNote": "Los cambios de activación pendientes no se incluyen: vuelve a escanear primero si quieres que entren en esta instalación.",
-      "forceWarning": "Parece que RimWorldWin64.exe se está ejecutando. Instalar ahora escribe ModsConfig.xml, que el juego sobreescribe al cerrarse, así que el cambio puede perderse. ¿Exportar de todos modos?",
+      "forceWarning": "Parece que RimWorld se está ejecutando. Instalar ahora escribe ModsConfig.xml, que el juego sobreescribe al cerrarse, así que el cambio puede perderse. ¿Exportar de todos modos?",
       "exportAnyway": "Exportar de todos modos",
       "export": "Exportar",
       "exportedTo": "Exportado a: {path}",

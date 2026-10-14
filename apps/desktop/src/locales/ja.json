@@ -1942,7 +1942,7 @@
       "chooseButton": "選択…",
       "installCheckboxLabel": "Modsフォルダーにインストールして有効化",
       "staleActiveSetNote": "保留中の有効化の変更は含まれません。このインストールに反映したい場合は、先に再スキャンしてください。",
-      "forceWarning": "RimWorldWin64.exeが実行中のようです。今インストールするとModsConfig.xmlに書き込みますが、ゲームは終了時にこのファイルを上書きするため、変更が失われるおそれがあります。それでもエクスポートしますか？",
+      "forceWarning": "RimWorldが実行中のようです。今インストールするとModsConfig.xmlに書き込みますが、ゲームは終了時にこのファイルを上書きするため、変更が失われるおそれがあります。それでもエクスポートしますか？",
       "exportAnyway": "それでもエクスポート",
       "export": "エクスポート",
       "exportedTo": "エクスポート先：{path}",

@@ -1942,7 +1942,7 @@
       "chooseButton": "選擇…",
       "installCheckboxLabel": "安裝到 Mods 資料夾並啟用",
       "staleActiveSetNote": "尚未掃描的啟用變更不會包含在內：如果要將它們納入此次安裝，請先重新掃描。",
-      "forceWarning": "RimWorldWin64.exe 似乎正在執行。現在安裝會寫入 ModsConfig.xml，而遊戲結束時會覆蓋該檔案，因此這項變更可能會遺失。仍要匯出嗎？",
+      "forceWarning": "RimWorld 似乎正在執行。現在安裝會寫入 ModsConfig.xml，而遊戲結束時會覆蓋該檔案，因此這項變更可能會遺失。仍要匯出嗎？",
       "exportAnyway": "仍要匯出",
       "export": "匯出",
       "exportedTo": "已匯出到：{path}",
