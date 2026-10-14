@@ -33,7 +33,7 @@ Other useful commands:
 bun run dev                      # Vite dev server only, no Tauri window (mocked-IPC UI work)
 bun run build                    # vue-tsc -b && vite build
 bun run tauri build --debug --no-bundle # debug binary only, no dev server or packages
-bun run tauri build              # release binary; Windows: exe only; Linux: deb + AppImage
+bun run tauri build              # release binary; Windows: exe only; Linux: deb bundle
 # Linux release packaging first needs: cargo build --release -p rimmerge-cli
 ```
 

@@ -32,16 +32,15 @@ function Pass([string]$Name) {
     Write-Output "PASS: $Name"
 }
 function Package-Names {
-    @("Rimmerge-$version-linux-x64-portable.tar.gz", "rimmerge-cli-$version-x86_64-unknown-linux-gnu.tar.gz", "Rimmerge_${version}_amd64.deb", "Rimmerge_${version}_amd64.AppImage")
+    @("Rimmerge-$version-linux-x64-portable.tar.gz", "rimmerge-cli-$version-x86_64-unknown-linux-gnu.tar.gz", "Rimmerge_${version}_amd64.deb")
 }
 
 try {
-    New-Item -ItemType Directory -Force -Path $mockBin, (Join-Path $target 'bundle/deb'), (Join-Path $target 'bundle/appimage') | Out-Null
+    New-Item -ItemType Directory -Force -Path $mockBin, (Join-Path $target 'bundle/deb') | Out-Null
     Set-Content (Join-Path $target 'rimmerge-desktop') 'synthetic desktop'
     Set-Content (Join-Path $target 'rimmerge') 'synthetic cli'
     $env:RIMMERGE_TEST_DEB = Join-Path $target "bundle/deb/Rimmerge_${version}_amd64.deb"
     Set-Content $env:RIMMERGE_TEST_DEB 'synthetic deb'
-    Set-Content (Join-Path $target "bundle/appimage/Rimmerge_${version}_amd64.AppImage") 'synthetic appimage'
     $env:RIMMERGE_TEST_TAR_COUNT = Join-Path $scratch 'tar-count'
     $tarMock = @'
 #!/bin/sh
@@ -86,7 +85,7 @@ exec __CHMOD__ "$@"
     Set-Content $env:RIMMERGE_TEST_TAR_COUNT '0'
     $out = Join-Path $scratch 'success'
     Invoke-Script $package @('-Version', $version, '-TargetDir', $target, '-OutDir', $out) $true
-    Assert-That (@(Get-ChildItem $out -File).Count -eq 4) 'expected all four Linux packages'
+    Assert-That (@(Get-ChildItem $out -File).Count -eq 3) 'expected all three Linux packages'
     $extract = Join-Path $scratch 'extract'
     New-Item -ItemType Directory -Path $extract | Out-Null
     & $realTar '-xzf' (Join-Path $out "Rimmerge-$version-linux-x64-portable.tar.gz") '-C' $extract
@@ -103,7 +102,7 @@ exec __CHMOD__ "$@"
     & $realTar '-xzf' (Join-Path $out "rimmerge-cli-$version-x86_64-unknown-linux-gnu.tar.gz") '-C' $extract
     Assert-That ($LASTEXITCODE -eq 0) 'CLI extraction failed'
     Assert-That (([int][System.IO.File]::GetUnixFileMode((Join-Path $extract 'rimmerge')) -band 0x49) -ne 0) 'CLI tarball lost execute permission'
-    Pass 'four Linux packages; tar contents, licenses and executable permissions'
+    Pass 'three Linux packages; tar contents, licenses and executable permissions'
 
     Invoke-Script $package @('-Version', $version, '-TargetDir', $target, '-OutDir', (Join-Path $target 'bundle/deb')) $false
     Assert-That (Test-Path $env:RIMMERGE_TEST_DEB -PathType Leaf) 'input alias deleted source deb'
@@ -161,13 +160,13 @@ function Copy-Item {
 
     $release = Join-Path $scratch 'release'
     Invoke-Script $collect @('-Version', $version, '-ArtifactDir', $artifacts, '-OutDir', $release) $true
-    Assert-That (@(Get-ChildItem $release -File).Count -eq 7) 'expected six artifacts plus checksums'
+    Assert-That (@(Get-ChildItem $release -File).Count -eq 6) 'expected five artifacts plus checksums'
     Push-Location $release
     try {
         & $sha256sum '-c' 'SHA256SUMS.txt'
         Assert-That ($LASTEXITCODE -eq 0) 'checksum verification failed'
     } finally { Pop-Location }
-    Pass 'all six release artifacts copied and independently verified with sha256sum'
+    Pass 'all five release artifacts copied and independently verified with sha256sum'
     Write-Output "Summary: $passed packaging checks passed"
 }
 finally {

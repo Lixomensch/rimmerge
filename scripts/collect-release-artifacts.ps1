@@ -13,8 +13,7 @@ $artifacts = @(
     "zips-windows/rimmerge-cli-$Version-x86_64-pc-windows-msvc.zip",
     "zips-linux/Rimmerge-$Version-linux-x64-portable.tar.gz",
     "zips-linux/rimmerge-cli-$Version-x86_64-unknown-linux-gnu.tar.gz",
-    "zips-linux/Rimmerge_${Version}_amd64.deb",
-    "zips-linux/Rimmerge_${Version}_amd64.AppImage"
+    "zips-linux/Rimmerge_${Version}_amd64.deb"
 )
 foreach ($artifact in $artifacts) {
     $source = Join-Path $ArtifactDir $artifact

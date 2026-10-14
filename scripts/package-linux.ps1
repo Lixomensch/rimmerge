@@ -2,17 +2,14 @@
 #   Rimmerge-<version>-linux-x64-portable.tar.gz      desktop app + CLI + licenses
 #   rimmerge-cli-<version>-x86_64-unknown-linux-gnu.tar.gz  the CLI binary alone
 #   Rimmerge_<version>_amd64.deb                       Tauri-generated .deb package
-#   Rimmerge_<version>_amd64.AppImage                  Tauri-generated AppImage
 #
-# The .deb and AppImage are built by Tauri; repack-appimage.py then removes
-# host Wayland/GLib libraries from the AppImage. This script collects them alongside
-# the portable tarball it assembles itself. Shared by the CI workflow and a
+# The .deb is built by Tauri. This script collects it alongside
+# the portable tarballs it assembles itself. Shared by the CI workflow and a
 # maintainer's local check, so a local run produces the same layout a release ships.
 #
 # Prerequisites (this script builds nothing):
 #   cargo build --release -p rimmerge-cli
 #   (cd apps/desktop && bun run tauri build)
-#   python3 scripts/repack-appimage.py target/release/bundle/appimage/Rimmerge_<version>_amd64.AppImage
 #
 # Usage:
 #   pwsh ./scripts/package-linux.ps1 -Version 1.0.0 [-OutDir <dir>] [-TargetDir <dir>]
@@ -27,7 +24,6 @@
 #
 # Tauri-generated bundles are copied verbatim from their own output paths:
 #   target/release/bundle/deb/Rimmerge_<version>_amd64.deb
-#   target/release/bundle/appimage/Rimmerge_<version>_amd64.AppImage
 #
 # Fails if any expected binary is missing and removes any partial output on
 # failure. Prints every output path. The release's SHA256SUMS.txt is written
@@ -66,11 +62,8 @@ foreach ($required in @($desktopBin, $cliBin)) {
 # Locate the Tauri-generated bundles (paths are version-dependent and
 # Tauri writes them relative to target/release/bundle/).
 $debPattern      = Join-Path $TargetDir "bundle/deb/Rimmerge_${Version}_amd64.deb"
-$appimagePattern = Join-Path $TargetDir "bundle/appimage/Rimmerge_${Version}_amd64.AppImage"
-foreach ($bundleFile in @($debPattern, $appimagePattern)) {
-    if (-not (Test-Path -LiteralPath $bundleFile -PathType Leaf)) {
-        throw "missing $bundleFile - run: bun run tauri build"
-    }
+if (-not (Test-Path -LiteralPath $debPattern -PathType Leaf)) {
+    throw "missing $debPattern - run: bun run tauri build"
 }
 
 $portableName = "Rimmerge-$Version-linux-x64-portable"
@@ -83,7 +76,6 @@ $resolvedOut  = (Resolve-Path -LiteralPath $OutDir).Path
 $tarball      = Join-Path $resolvedOut "$portableName.tar.gz"
 $cliTarball   = Join-Path $resolvedOut "$cliName.tar.gz"
 $outDeb       = Join-Path $resolvedOut "Rimmerge_${Version}_amd64.deb"
-$outAppImage  = Join-Path $resolvedOut "Rimmerge_${Version}_amd64.AppImage"
 
 $readme = @"
 Rimmerge $Version - portable Linux build
@@ -116,10 +108,10 @@ Documentation: https://github.com/Rimmerge-Project/rimmerge
 Licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
 "@
 
-$outputs = @($tarball, $cliTarball, $outDeb, $outAppImage)
+$outputs = @($tarball, $cliTarball, $outDeb)
 # Never delete a source package when an output folder aliases its directory.
 foreach ($output in $outputs) {
-    foreach ($source in @($desktopBin, $cliBin, $debPattern, $appimagePattern)) {
+    foreach ($source in @($desktopBin, $cliBin, $debPattern)) {
         if ([System.IO.Path]::GetFullPath($output) -eq [System.IO.Path]::GetFullPath($source)) {
             throw "output aliases an input: $output"
         }
@@ -142,7 +134,7 @@ try {
     # Archives preserve these modes; assemble both from the staged binaries.
     Invoke-CheckedNative -Command chmod -Arguments @("+x", (Join-Path $folder "Rimmerge"), (Join-Path $folder "cli/rimmerge"))
 
-    foreach ($stale in @($tarball, $cliTarball, $outDeb, $outAppImage)) {
+    foreach ($stale in $outputs) {
         if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale }
     }
 
@@ -152,9 +144,6 @@ try {
 
     # Copy Tauri-generated packages verbatim.
     Copy-Item -LiteralPath $debPattern      -Destination $outDeb
-    Copy-Item -LiteralPath $appimagePattern -Destination $outAppImage
-
-    Invoke-CheckedNative -Command chmod -Arguments @("+x", $outAppImage)
     foreach ($output in $outputs) {
         if (-not (Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
             throw "missing or empty output: $output"

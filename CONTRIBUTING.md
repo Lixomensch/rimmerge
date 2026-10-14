@@ -214,12 +214,12 @@ files, and all of them must agree before a tag is pushed:
    files above fails before anything builds), builds the CLI before the
    desktop, and packages Windows x64 and Ubuntu 24.04 x86_64 artifacts.
    Windows has two ZIPs (`scripts/package-portable.ps1`); Linux has two
-   tarballs, a `.deb` with desktop/CLI/licenses, and a desktop AppImage
-   (`scripts/package-linux.ps1`). The workflow requires all six files
+   tarballs and a `.deb` with desktop/CLI/licenses
+   (`scripts/package-linux.ps1`). The workflow requires all five files
    before creating a **draft** GitHub Release with `SHA256SUMS.txt`.
-   A manual workflow run validates/uploads all six packages and checksums as
+   A manual workflow run validates/uploads all five packages and checksums as
    the `release-artifacts` Actions artifact, without creating a release.
-4. Review the draft release (release notes, all six artifacts and the
+4. Review the draft release (release notes, all five artifacts and the
    checksum file present) and publish it by hand. Binaries are unsigned;
    state that in the release notes. Linux packaging runs on the pinned
    Ubuntu baseline, not an arbitrary newer distribution; see `docs/install.md`.

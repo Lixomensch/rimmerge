@@ -21,7 +21,6 @@ Tagged releases ship the following artifacts, built by `.github/workflows/releas
 | Windows | `Rimmerge-<ver>-windows-x64-portable.zip` | Desktop (`Rimmerge.exe`) + CLI (`cli\\rimmerge.exe`) + licenses |
 | Windows | `rimmerge-cli-<ver>-x86_64-pc-windows-msvc.zip` | CLI only |
 | Linux | `Rimmerge_<ver>_amd64.deb` | Desktop + `/usr/bin/rimmerge` CLI + MIT/Apache licenses |
-| Linux | `Rimmerge_<ver>_amd64.AppImage` | Desktop AppImage + licenses (Ubuntu 24.04 x86_64 baseline) |
 | Linux | `Rimmerge-<ver>-linux-x64-portable.tar.gz` | Desktop + CLI + licenses, portable tarball |
 | Linux | `rimmerge-cli-<ver>-x86_64-unknown-linux-gnu.tar.gz` | CLI only |
 

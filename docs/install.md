@@ -14,7 +14,6 @@ draft release; use the published assets available on
   app `Rimmerge.exe`, the CLI `cli\rimmerge.exe`, and the licenses), a
   CLI-only zip.
 - **Linux**: `Rimmerge_<version>_amd64.deb` (desktop, CLI and licenses),
-  `Rimmerge_<version>_amd64.AppImage` (desktop and licenses),
   `Rimmerge-<version>-linux-x64-portable.tar.gz` (desktop + CLI, extract
   anywhere), and a CLI-only tarball.
 
@@ -31,12 +30,6 @@ sudo apt install ./Rimmerge_<version>_amd64.deb
 ```
 The app appears in your launcher as *Rimmerge*; the CLI (`rimmerge`) is
 installed to `/usr/bin`.
-
-**Linux — AppImage (see the support boundary below):**
-```sh
-chmod +x Rimmerge_<version>_amd64.AppImage
-./Rimmerge_<version>_amd64.AppImage
-```
 
 **Linux — portable tarball (see the support boundary below):**
 ```sh
@@ -100,7 +93,7 @@ folders under `%LOCALAPPDATA%`:
 Moving the folder or extracting a newer release over it keeps both.
 
 **Uninstalling.** For the `.deb`, run `sudo apt remove rimmerge`. For a
-portable archive or AppImage, delete the extracted folder or file. To remove
+portable archive, delete the extracted folder. To remove
 your data as well, also delete both folders above. Portable packages do not
 install themselves elsewhere; the `.deb` installs its files through the
 package manager. The app does not run at startup.
@@ -146,12 +139,10 @@ cd apps/desktop
 bun install --frozen-lockfile
 bun run tauri build
 # executable at target/release/rimmerge-desktop[.exe]
-# Windows: no installer. Linux: .deb and AppImage bundles.
+# Windows: no installer. Linux: .deb bundle.
 ```
 
 For development without packaging, use `bun run tauri build --debug --no-bundle`.
-Build release AppImages on Ubuntu 24.04; other build hosts are not validation
-for the supported packaging baseline.
 
 `bun run tauri dev` runs it without a release build, for
 day-to-day development — see
@@ -167,13 +158,10 @@ pwsh ./scripts/package-portable.ps1 -Version 1.0.0 -OutDir out
 
 Linux (after `bun run tauri build`):
 ```sh
-python3 scripts/repack-appimage.py target/release/bundle/appimage/Rimmerge_1.0.0_amd64.AppImage
 pwsh ./scripts/package-linux.ps1 -Version 1.0.0 -OutDir out
 ```
 
-Use the actual build version in both commands. The repacker reuses Tauri's
-cached output plugin and the original AppImage runtime. The release workflow
-performs this step before package inspection and checksum generation.
+Use the actual build version in the command.
 
 ## Finding your install
 
@@ -230,7 +218,7 @@ not move with `XDG_CONFIG_HOME`. Rimmerge's own profile data respects
 
 | Target | Initial packaging baseline | Formats |
 | --- | --- | --- |
-| Linux GNU x86_64 / amd64 | Ubuntu 24.04 LTS | Desktop + CLI portable tarball, CLI tarball, `.deb`, desktop AppImage |
+| Linux GNU x86_64 / amd64 | Ubuntu 24.04 LTS | Desktop + CLI portable tarball, CLI tarball, `.deb` |
 
 Release builds use Ubuntu 24.04, the oldest supported packaging baseline.
 Other distributions, older glibc versions and other architectures are not
@@ -240,18 +228,9 @@ X11 and Wayland smoke evidence is pending; neither session has been declared
 validated by the Linux fixture tests alone.
 
 The `.deb` declares WebKitGTK 4.1 and GTK dependencies. The desktop portable
-tarball requires compatible system libraries. AppImage bundles libraries, but
-uses the host's Wayland, GLib/GIO and their supporting libraries to stay
-compatible with host graphics drivers and GIO modules such as GVFS. These
-system libraries must be present; the supported Ubuntu desktop baseline
-provides them. No `LD_PRELOAD` override is required by the packaging flow.
-It still depends on compatible host facilities; on Ubuntu 24.04, FUSE 2 is provided
-by `sudo apt install libfuse2t64` (see the
-[Ubuntu package](https://packages.ubuntu.com/noble/libfuse2t64)). The CLI can
-also be downloaded separately.
-Both licenses are in the desktop tarball, `.deb` and AppImage. See
-[Tauri's Debian guidance](https://v2.tauri.app/distribute/debian/) and
-[AppImage guidance](https://v2.tauri.app/distribute/appimage/).
+tarball requires compatible system libraries. The CLI can also be downloaded
+separately. Both licenses are in the desktop tarball and `.deb`. See
+[Tauri's Debian guidance](https://v2.tauri.app/distribute/debian/).
 
 Native layouts use `RimWorldLinux` and `RimWorldLinux_Data`. Flatpak Steam
 and Proton discovery covers common paths and secondary Steam libraries;

@@ -4,7 +4,7 @@ name: Release
 # Windows builds produce portable zips via scripts/package-portable.ps1
 # (the Tauri bundler is off there — bundle.active: false keeps the exe
 # alone, matching what package-portable.ps1 expects). Linux builds
-# activate the bundler for deb and AppImage targets via
+# activate the bundler for the deb target via
 # tauri.linux.conf.json, then produce portable tarballs via
 # scripts/package-linux.ps1. The two jobs upload to separate artifact
 # names so the release job can download them all at once.
@@ -96,7 +96,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl file libayatana-appindicator3-dev \
-            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget libfuse2t64
+            libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -118,10 +118,6 @@ jobs:
         shell: pwsh
         run: ../../scripts/tests/package-linux.Tests.ps1
 
-      - name: AppImage repacking regressions (synthetic files only)
-        if: runner.os == 'Linux'
-        run: python3 ../../scripts/tests/repack_appimage_tests.py
-
       # Build the CLI before Tauri: the Linux .deb includes it.
       # Built once per platform. On Windows: rimmerge.exe.
       # On Linux: rimmerge (ELF, no extension).
@@ -134,22 +130,16 @@ jobs:
       # Runs `beforeBuildCommand` (`bun run build`) itself, so no
       # separate frontend build step is needed here.
       # On Windows, bundle.active is false, producing only the exe.
-      # On Linux, tauri.linux.conf.json activates bundling for deb and
-      # AppImage targets — Tauri v2 auto-merges platform-specific
+      # On Linux, tauri.linux.conf.json activates bundling for deb —
+      # Tauri v2 auto-merges platform-specific
       # overlay configs (tauri.<os>.conf.json) before building.
       - name: bun run tauri build (Windows — exe only, no installer)
         if: runner.os == 'Windows'
         run: bun run tauri build
 
-      - name: bun run tauri build (Linux — deb + AppImage bundles)
+      - name: bun run tauri build (Linux — deb bundle)
         if: runner.os == 'Linux'
         run: bun run tauri build
-
-      - name: Repack AppImage with host Wayland and GLib libraries
-        if: runner.os == 'Linux'
-        env:
-          VERSION: ${{ needs.version-check.outputs.version }}
-        run: python3 ../../scripts/repack-appimage.py "../../target/release/bundle/appimage/Rimmerge_${VERSION}_amd64.AppImage"
 
       - name: Verify Linux bundle contents (Ubuntu)
         if: runner.os == 'Linux'
@@ -171,29 +161,6 @@ jobs:
           for license in LICENSE-MIT LICENSE-APACHE; do
             cmp "$repo/$license" "$scratch/deb/usr/share/doc/rimmerge/$license"
           done
-          cd "$scratch"
-          "$repo/target/release/bundle/appimage/Rimmerge_${VERSION}_amd64.AppImage" --appimage-extract
-          test -x squashfs-root/AppRun
-          test -f squashfs-root/Rimmerge.desktop
-          python3 - "$repo" "$scratch/squashfs-root" <<'PY'
-          import importlib.util
-          from pathlib import Path
-          import sys
-          sys.dont_write_bytecode = True
-          spec = importlib.util.spec_from_file_location("repack", Path(sys.argv[1]) / "scripts/repack-appimage.py")
-          module = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(module)
-          if module.host_libraries(Path(sys.argv[2])):
-              raise SystemExit("AppImage contains host Wayland/GLib libraries")
-          PY
-          for license in LICENSE-MIT LICENSE-APACHE; do
-            found=0
-            while IFS= read -r -d '' candidate; do
-              if cmp -s "$repo/$license" "$candidate"; then found=1; break; fi
-            done < <(find squashfs-root -type f -name "$license" -print0)
-            test "$found" = 1
-          done
-
       # Windows only: package-portable.ps1 produces the portable zip and
       # the CLI-only zip. Working directory is apps/desktop here, so the
       # script and the output folder are reached with ../../.
@@ -204,8 +171,8 @@ jobs:
           VERSION: ${{ needs.version-check.outputs.version }}
         run: ../../scripts/package-portable.ps1 -Version $env:VERSION -OutDir ../../portable
 
-      # Linux only: package-linux.ps1 produces the portable tarball, the
-      # CLI tarball, and copies the Tauri-generated deb and AppImage.
+      # Linux only: package-linux.ps1 produces portable desktop/CLI tarballs
+      # and copies the Tauri-generated deb.
       - name: package-linux (Linux)
         if: runner.os == 'Linux'
         shell: pwsh
@@ -236,7 +203,6 @@ jobs:
             portable/Rimmerge-${{ needs.version-check.outputs.version }}-linux-x64-portable.tar.gz
             portable/rimmerge-cli-${{ needs.version-check.outputs.version }}-x86_64-unknown-linux-gnu.tar.gz
             portable/Rimmerge_${{ needs.version-check.outputs.version }}_amd64.deb
-            portable/Rimmerge_${{ needs.version-check.outputs.version }}_amd64.AppImage
           if-no-files-found: error
 
   collect:
@@ -251,7 +217,7 @@ jobs:
       # One checksum file for every artifact across all platforms, with
       # bare file names so `sha256sum -c SHA256SUMS.txt` works from the
       # download folder without path prefixes.
-      - name: Collect all six artifacts and write SHA256SUMS
+      - name: Collect all five artifacts and write SHA256SUMS
         shell: pwsh
         env:
           VERSION: ${{ needs.version-check.outputs.version }}

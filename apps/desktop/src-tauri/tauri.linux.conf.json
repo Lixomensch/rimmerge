@@ -3,8 +3,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "deb",
-      "appimage"
+      "deb"
     ],
     "shortDescription": "Conflict-aware RimWorld mod manager and load order optimizer",
     "longDescription": "Rimmerge sorts a RimWorld mod list into a conflict-aware load order and tracks every conflict it finds — dropped dependency edges, def overrides, patch collisions, duplicate assemblies, incompatible pairs, and more — in a resolution ledger whose decisions persist across re-scans.",
