@@ -403,12 +403,13 @@ gate block in the root `CLAUDE.md`.
   `schema` key must still load rather than silently coming back empty
   and sending the app off to detection instead; the file is always
   *written* with the current schema, so a hand-written file gains the
-  key on its next save. `app_config::pinned_path` absolutizes (relative
-  to absolute) and canonicalizes (resolving `.`/`..` and the
-  `\\?\`-prefix) any of `game_dir`/`workshop_dir`/`mods_config`
-  **before** it's written into `config.json` (both `apps/cli`'s
-  `config set` and the desktop's own pin command go through it) — never
-  store a path a later lexical comparison could be fooled by.
+  key on its next save. `app_config::pinned_path` absolutizes and resolves
+  existing ancestors for `workshop_dir`/`mods_config` before saving.
+  `pinned_game_path` preserves absolute Linux library aliases so discovery
+  retains Steam ownership; Windows uses the existing canonicalization.
+  Both CLI and desktop share these helpers. Exports must additionally use
+  `resolve_export_dir` to refuse the absolute and physical Mods locations
+  before writing or persisting the target.
 - **`mod_knowledge.rs` + `build.rs`**: `FsModKnowledgeStore`
   implements `rim_session::ports::ModKnowledgeStore` as "the fetched
   `<cache_dir>/rimmergeRules.json` if present and it parses, else the
@@ -487,8 +488,10 @@ gate block in the root `CLAUDE.md`.
   adapter state: they're built once at the composition root, before any
   project exists, while the carrier list is per-project data.
 - Profile dir = `<base>/profiles/<12 hex of sha256(normalized ModsConfig
-  path)>`; normalisation strips `\\?\`, lowercases, and uses forward
-  slashes.
+  path)>`; existing paths are canonicalized. On Windows, normalisation
+  strips `\\?\`, lowercases, and uses forward slashes. Unix preserves
+  original path bytes, case and literal backslashes; valid UTF-8 path IDs
+  are unchanged.
 - **`asset_locator.rs`**: `FileAssetLocator::locate_texture` trusts
   `mod_loaded_folders` to already be in load-priority order (highest
   first — `Mod::loaded_folders`'s own contract) and never re-derives or

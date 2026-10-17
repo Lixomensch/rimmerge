@@ -164,9 +164,13 @@ you click it (see [Launching RimWorld](desktop.md#launching-rimworld)).
 The request it sends to the backend names no path or URL; the backend
 works out both from the configured install.
 
-- **A Steam copy** is started by handing the fixed link
-  `steam://run/294100` to the operating system, which passes it to the
-  Steam client already installed on your computer. Rimmerge opens no connection and
+- **A Steam copy** uses the fixed link `steam://run/294100` on Windows.
+  On Linux, Rimmerge runs the owning native or Flatpak Steam client with
+  `-applaunch 294100`, using separate arguments and no shell. A missing or
+  ambiguous client produces an error instead of switching clients.
+  Before a Flatpak launch, `flatpak info --show-ref com.valvesoftware.Steam`
+  checks the local installation; this check makes no network request.
+  Rimmerge opens no connection and
   contacts no host to do this: it isn't a web request, the two hosts
   above are still the only ones Rimmerge ever contacts, and the
   Internet access switch has nothing to block here.

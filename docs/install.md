@@ -161,7 +161,11 @@ Linux (after `bun run tauri build`):
 pwsh ./scripts/package-linux.ps1 -Version 1.0.0 -OutDir out
 ```
 
-Use the actual build version in the command.
+Use the actual build version in the command. Linux packaging and release
+collection require output files to be physically separate from their inputs,
+including through symlinks or junctions. Choose a separate output directory;
+broken or inaccessible links are refused before copying or cleanup.
+Individual output files must be regular files, rather than links.
 
 ## Finding your install
 
@@ -234,7 +238,7 @@ validated by the Linux fixture tests alone.
 
 The `.deb` declares WebKitGTK 4.1 and GTK dependencies. The desktop portable
 tarball requires compatible system libraries. The CLI can also be downloaded
-separately. Both licenses are in the desktop tarball and `.deb`. See
+separately. Both licenses are in each Linux tarball and the `.deb`. See
 [Tauri's Debian guidance](https://v2.tauri.app/distribute/debian/).
 
 Native layouts use `RimWorldLinux` and `RimWorldLinux_Data`. Flatpak Steam

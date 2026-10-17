@@ -616,6 +616,17 @@ fn run_export(args: &ExportArgs) -> anyhow::Result<()> {
 fn run_export_with_probe(args: &ExportArgs, probe: &dyn GameProcessProbe) -> anyhow::Result<()> {
     let id = parse_patch_id(&args.patch)?;
     let paths = resolve_paths(&args.paths)?;
+    let out_dir =
+        rim_io::resolve_export_dir(&args.out_dir, &paths.game_dir).map_err(
+            |error| match error {
+                rim_io::ExportDirError::InsideMods(path) => {
+                    let error = rim_session::use_cases::ExportPatchError::OutDirIsModsFolder(path);
+                    anyhow::anyhow!("exporting the patch: {error:?} ({error})")
+                }
+                rim_io::ExportDirError::Io(error) => anyhow::Error::new(error)
+                    .context(format!("resolving --out {}", args.out_dir.display())),
+            },
+        )?;
     let mut session = build_session(paths)?;
 
     if args.install && !args.force && probe.is_running() {
@@ -623,16 +634,6 @@ fn run_export_with_probe(args: &ExportArgs, probe: &dyn GameProcessProbe) -> any
             "RimWorld is running; close the game or retry with --force (installing a patch writes ModsConfig.xml, and RimWorld overwrites it on exit)"
         );
     }
-
-    // Absolutized (`std::path::absolute`) and, when it already exists,
-    // canonicalized (resolving `.`/`..`, symlinks, and junctions, with
-    // the `\\?\` prefix stripped back off) — `ExportPatch` itself has no
-    // filesystem access of its own and can only compare `out_dir`
-    // lexically (see that use case's doc comment on `is_inside`), so a
-    // relative path or a junction pointing into the game's `Mods` folder
-    // must be resolved here, before it ever reaches the use case.
-    let out_dir = rim_io::resolve_user_dir(&args.out_dir)
-        .with_context(|| format!("resolving --out {}", args.out_dir.display()))?;
 
     let use_case = ExportPatch::new(
         rim_io::MergeModFolderWriter::new(),

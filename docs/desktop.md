@@ -106,8 +106,12 @@ The **Launch RimWorld** button sits in the sidebar under Apply, and again at
 the end of the Dashboard strip once its steps are done. It starts the game;
 Rimmerge stays open.
 
-**How the game is started.** A Steam copy is started through Steam
-(`steam://run/294100`), so Steam's own launch settings apply. Any other copy
+**How the game is started.** A Steam copy uses `steam://run/294100` on
+Windows. On Linux, Rimmerge starts the owning client with
+`steam -applaunch 294100` or
+`flatpak run com.valvesoftware.Steam -applaunch 294100`, so Steam's own launch
+settings apply. Conflicting ownership records or a missing client cause an
+error; Rimmerge does not switch to another client. Any other copy
 (GOG, a standalone folder) starts the install's executable directly, with no
 arguments: `RimWorldWin64.exe` on Windows, or `RimWorldLinux.x86_64`
 (preferred) / `RimWorldLinux` on Linux. The target must be a regular file,
@@ -120,6 +124,10 @@ copied out of Steam, or a backed-up library, is not mistaken for the real one
 outside the default Steam roots uses direct launch when a valid native
 executable is available. On Linux, a Windows `.exe` is never launched
 directly; Proton copies require a verified Steam route.
+
+Flatpak launches first check that `com.valvesoftware.Steam` is installed.
+Abnormal client or game exits are logged in the background; accepting a launch
+request does not confirm that the game finished starting.
 
 **What the button says.** It reads from the **selected** order and the last
 scan or apply, the same caveat as the strip: an edit made to `ModsConfig.xml`

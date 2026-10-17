@@ -34,12 +34,17 @@ impl GameExecutableName {
             Self::Windows => RIMWORLD_EXECUTABLE,
         }
     }
+}
 
-    /// Whether this candidate requires Unix executable permissions.
-    #[must_use]
-    pub const fn requires_executable_bit(self) -> bool {
-        !matches!(self, Self::Windows)
-    }
+/// The Steam client that owns the selected installation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SteamClient {
+    /// The operating system's registered Steam handler (Windows).
+    SystemDefault,
+    /// Steam installed directly on Linux.
+    Native,
+    /// The com.valvesoftware.Steam Flatpak client.
+    Flatpak,
 }
 
 /// The one executable a launch may start, derived from the install directory.
@@ -78,7 +83,7 @@ impl GameExecutable {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchRoute {
     /// Through Steam, which starts the copy its own manifest names.
-    Steam,
+    Steam(SteamClient),
     /// By running the install's own executable.
     Executable(GameExecutable),
 }
@@ -88,7 +93,7 @@ impl LaunchRoute {
     #[must_use]
     pub fn kind(&self) -> LaunchRouteKind {
         match self {
-            Self::Steam => LaunchRouteKind::Steam,
+            Self::Steam(_) => LaunchRouteKind::Steam,
             Self::Executable(_) => LaunchRouteKind::Executable,
         }
     }
@@ -117,8 +122,7 @@ pub trait GameLauncher {
 /// The OS refused to start the game.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum LaunchFailure {
-    /// The OS refused the Steam run request (Steam missing, protocol not
-    /// registered).
+    /// The OS refused to start the owning Steam client or its registered handler.
     #[error("Steam did not accept the launch request: {0}")]
     SteamRefused(String),
     /// Spawning the selected RimWorld executable failed.
@@ -157,7 +161,10 @@ mod tests {
     fn a_route_reports_its_kind() {
         let executable = LaunchRoute::Executable(GameExecutable::of_install(Path::new("x")));
 
-        assert_eq!(LaunchRoute::Steam.kind(), LaunchRouteKind::Steam);
+        assert_eq!(
+            LaunchRoute::Steam(crate::ports::SteamClient::SystemDefault).kind(),
+            LaunchRouteKind::Steam
+        );
         assert_eq!(executable.kind(), LaunchRouteKind::Executable);
     }
 }

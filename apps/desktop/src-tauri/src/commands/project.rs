@@ -294,7 +294,7 @@ pub async fn save_app_config(config: AppConfigDto) -> Result<(), CommandError> {
         )
     })?;
     rim_io::AppConfig {
-        game_dir: pinned_path(config.game_dir),
+        game_dir: configured_path(config.game_dir).map(|path| rim_io::pinned_game_path(&path)),
         workshop_dir: pinned_path(config.workshop_dir),
         mods_config: pinned_path(config.mods_config),
     }
@@ -308,10 +308,14 @@ pub async fn save_app_config(config: AppConfigDto) -> Result<(), CommandError> {
 /// the app was launched from, so a relative path stored here would mean
 /// something different on the next start.
 fn pinned_path(value: Option<String>) -> Option<PathBuf> {
+    configured_path(value).map(|path| rim_io::pinned_path(&path))
+}
+
+fn configured_path(value: Option<String>) -> Option<PathBuf> {
     value
         .map(|text| text.trim().to_string())
         .filter(|text| !text.is_empty())
-        .map(|text| rim_io::pinned_path(&PathBuf::from(text)))
+        .map(PathBuf::from)
 }
 
 /// RimSort's own default database directory (`%LOCALAPPDATA%\RimSort\dbs` on

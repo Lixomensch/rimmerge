@@ -1,5 +1,6 @@
 # Collect the exact Windows/Linux release set before writing checksums.
-# Used by release.yml; does not create or publish a release.
+# Used by release.yml; does not create or publish a release. Output files must
+# be regular files physically separate from inputs, including through links.
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version,
     [Parameter(Mandatory = $true)][string]$ArtifactDir,
@@ -8,6 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'artifact-paths.ps1')
 $artifacts = @(
     "zips-windows/Rimmerge-$Version-windows-x64-portable.zip",
     "zips-windows/rimmerge-cli-$Version-x86_64-pc-windows-msvc.zip",
@@ -21,34 +23,33 @@ foreach ($artifact in $artifacts) {
         throw "missing or empty release artifact: $source"
     }
 }
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$outRoot = (Resolve-Path -LiteralPath $OutDir).Path
+$sources = @($artifacts | ForEach-Object { Resolve-PhysicalArtifactPath (Join-Path $ArtifactDir $_) })
+$outRoot = Resolve-PhysicalArtifactPath $OutDir
 $outputs = @($artifacts | ForEach-Object { Join-Path $outRoot (Split-Path -Leaf $_) })
 $checksums = Join-Path $outRoot 'SHA256SUMS.txt'
-foreach ($output in @($outputs) + @($checksums)) {
-    if ((Test-Path -LiteralPath $output) -and -not (Test-Path -LiteralPath $output -PathType Leaf)) {
-        throw "output is not a regular file: $output"
-    }
-}
-for ($index = 0; $index -lt $artifacts.Count; $index++) {
-    if ([System.IO.Path]::GetFullPath((Join-Path $ArtifactDir $artifacts[$index])) -eq $outputs[$index]) {
-        throw "output aliases an input: $($outputs[$index])"
-    }
-}
+Assert-ArtifactOutputs -Inputs $sources -Outputs (@($outputs) + @($checksums))
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) ('rimmerge-collect-' + [guid]::NewGuid().ToString('N'))
+$stagedOutputs = @($outputs | ForEach-Object { Join-Path $stage (Split-Path -Leaf $_) })
+$stagedChecksums = Join-Path $stage 'SHA256SUMS.txt'
+$stageCreated = $false
 try {
-    for ($index = 0; $index -lt $artifacts.Count; $index++) {
-        Copy-Item -LiteralPath (Join-Path $ArtifactDir $artifacts[$index]) -Destination $outputs[$index] -Force
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    $stageCreated = $true
+    for ($index = 0; $index -lt $sources.Count; $index++) {
+        Copy-Item -LiteralPath $sources[$index] -Destination $stagedOutputs[$index]
     }
-    $lines = foreach ($output in $outputs) {
+    $lines = foreach ($output in $stagedOutputs) {
+        if (-not (Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
+            throw "missing or empty staged artifact: $output"
+        }
         $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $(Split-Path -Leaf $output)"
     }
-    Set-Content -LiteralPath $checksums -Value $lines -Encoding utf8NoBOM
+    Set-Content -LiteralPath $stagedChecksums -Value $lines -Encoding utf8NoBOM
+    New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
+    Publish-ArtifactFiles -Sources (@($stagedOutputs) + @($stagedChecksums)) -Outputs (@($outputs) + @($checksums)) -Stage $stage
     Get-Content -LiteralPath $checksums
 }
-catch {
-    foreach ($partial in @($outputs) + @($checksums)) {
-        if (Test-Path -LiteralPath $partial -PathType Leaf) { Remove-Item -LiteralPath $partial -Force }
-    }
-    throw
+finally {
+    if ($stageCreated) { Remove-Item -LiteralPath $stage -Recurse -Force }
 }

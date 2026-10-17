@@ -1,6 +1,6 @@
 # Builds Linux release artifacts from already-built release binaries:
 #   Rimmerge-<version>-linux-x64-portable.tar.gz      desktop app + CLI + licenses
-#   rimmerge-cli-<version>-x86_64-unknown-linux-gnu.tar.gz  the CLI binary alone
+#   rimmerge-cli-<version>-x86_64-unknown-linux-gnu.tar.gz  CLI + licenses
 #   Rimmerge_<version>_amd64.deb                       Tauri-generated .deb package
 #
 # The .deb is built by Tauri. This script collects it alongside
@@ -26,7 +26,8 @@
 #   target/release/bundle/deb/Rimmerge_<version>_amd64.deb
 #
 # Fails if any expected binary is missing and removes any partial output on
-# failure. Prints every output path. The release's SHA256SUMS.txt is written
+# failure, restoring previous outputs if publication fails. Outputs must be
+# regular files physically separate from the inputs. Prints every output path. The release's SHA256SUMS.txt is written
 # by the workflow, not here.
 
 param(
@@ -37,6 +38,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "artifact-paths.ps1")
 if (-not $IsLinux) { throw "Linux packages must be assembled on Linux" }
 
 function Invoke-CheckedNative {
@@ -71,8 +73,7 @@ $cliName      = "rimmerge-cli-$Version-x86_64-unknown-linux-gnu"
 $tempDir      = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
 $stage        = Join-Path $tempDir ("rimmerge-linux-" + [guid]::NewGuid().ToString("N"))
 $folder       = Join-Path $stage $portableName
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$resolvedOut  = (Resolve-Path -LiteralPath $OutDir).Path
+$resolvedOut  = Resolve-PhysicalArtifactPath $OutDir
 $tarball      = Join-Path $resolvedOut "$portableName.tar.gz"
 $cliTarball   = Join-Path $resolvedOut "$cliName.tar.gz"
 $outDeb       = Join-Path $resolvedOut "Rimmerge_${Version}_amd64.deb"
@@ -109,18 +110,16 @@ Licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
 "@
 
 $outputs = @($tarball, $cliTarball, $outDeb)
-# Never delete a source package when an output folder aliases its directory.
-foreach ($output in $outputs) {
-    foreach ($source in @($desktopBin, $cliBin, $debPattern)) {
-        if ([System.IO.Path]::GetFullPath($output) -eq [System.IO.Path]::GetFullPath($source)) {
-            throw "output aliases an input: $output"
-        }
-    }
-    if ((Test-Path -LiteralPath $output) -and -not (Test-Path -LiteralPath $output -PathType Leaf)) {
-        throw "output is not a regular file: $output"
-    }
-}
+$sources = @($desktopBin, $cliBin, $debPattern) | ForEach-Object { Resolve-PhysicalArtifactPath $_ }
+$licenseSources = @('LICENSE-MIT', 'LICENSE-APACHE') | ForEach-Object { Resolve-PhysicalArtifactPath (Join-Path $repoRoot $_) }
+Assert-ArtifactOutputs -Inputs (@($sources) + @($licenseSources)) -Outputs $outputs
+$desktopBin, $cliBin, $debPattern = $sources
+$stagedOutputs = @($outputs | ForEach-Object { Join-Path $stage (Split-Path -Leaf $_) })
+$stageCreated = $false
+
 try {
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    $stageCreated = $true
     New-Item -ItemType Directory -Path $folder | Out-Null
     # Portable tarball
     Copy-Item -LiteralPath $desktopBin -Destination (Join-Path $folder "Rimmerge")
@@ -134,29 +133,21 @@ try {
     # Archives preserve these modes; assemble both from the staged binaries.
     Invoke-CheckedNative -Command chmod -Arguments @("+x", (Join-Path $folder "Rimmerge"), (Join-Path $folder "cli/rimmerge"))
 
-    foreach ($stale in $outputs) {
-        if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale }
-    }
-
     # tar preserves the Unix permissions chmod set above.
-    Invoke-CheckedNative -Command tar -Arguments @("-czf", $tarball, "-C", $stage, $portableName)
-    Invoke-CheckedNative -Command tar -Arguments @("-czf", $cliTarball, "-C", (Join-Path $folder "cli"), "rimmerge")
+    Invoke-CheckedNative -Command tar -Arguments @("-czf", $stagedOutputs[0], "-C", $stage, $portableName)
+    Invoke-CheckedNative -Command tar -Arguments @("-czf", $stagedOutputs[1], "-C", (Join-Path $folder "cli"), "rimmerge", "-C", $folder, "LICENSE-MIT", "LICENSE-APACHE")
 
     # Copy Tauri-generated packages verbatim.
-    Copy-Item -LiteralPath $debPattern      -Destination $outDeb
-    foreach ($output in $outputs) {
+    Copy-Item -LiteralPath $debPattern -Destination $stagedOutputs[2]
+    foreach ($output in $stagedOutputs) {
         if (-not (Test-Path -LiteralPath $output -PathType Leaf) -or (Get-Item -LiteralPath $output).Length -eq 0) {
             throw "missing or empty output: $output"
         }
     }
+    New-Item -ItemType Directory -Force -Path $resolvedOut | Out-Null
+    Publish-ArtifactFiles -Sources $stagedOutputs -Outputs $outputs -Stage $stage
     $outputs | ForEach-Object { Write-Output $_ }
 }
-catch {
-    foreach ($partial in $outputs) {
-        if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
-    }
-    throw
-}
 finally {
-    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    if ($stageCreated) { Remove-Item -LiteralPath $stage -Recurse -Force }
 }

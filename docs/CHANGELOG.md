@@ -6,15 +6,16 @@ maintainer's own checkout for the full record, if you have it.
 
 ## [Unreleased]
 
-- Add native Linux desktop and CLI support, with Ubuntu 24.04 x86_64 as
-  the initial baseline and deb and portable tarball release packages.
-- Resolve native Unity config and data paths, HOME/XDG application data,
-  Steam/Flatpak libraries and library-specific Proton configs. Ambiguous
-  installs require an explicit ModsConfig.xml path.
-- Detect native and Proton/Wine game processes for write protection, ignore
-  zombies, validate native executables and reap direct-launch children
-  without blocking the interface. Sorting, ledger and merge semantics are
-  unchanged.
+- **Rimmerge runs natively on Linux.** Desktop and CLI packages are available
+  as deb and portable tarballs, with Ubuntu 24.04 x86_64 as the initial
+  baseline. X11 and Wayland desktop sessions still need runtime verification.
+  Discovery supports native Unity config and data paths, HOME/XDG application
+  data, Steam/Flatpak libraries and library-specific Proton configs; ambiguous
+  installs require an explicit ModsConfig.xml path. Write protection detects
+  native and Proton/Wine game processes and ignores zombies. Direct launch
+  validates native executables, separates their Unix process group and reaps
+  children without blocking the interface. Sorting, ledger and merge semantics
+  are unchanged.
 
 ## [1.2.3] - 2026-10-09
 

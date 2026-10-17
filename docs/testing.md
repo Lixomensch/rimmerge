@@ -15,8 +15,8 @@ runs, and it's what "the tests pass" means for a normal contribution.
 It includes a committed, synthetic golden fixture (below) exercising
 the sorter and ledger against realistic, but entirely invented, data.
 On Linux, `apps/cli/tests/native_install_e2e.rs` also runs a disposable native
-layout through config discovery, scan, sort, ledger, verify, apply with backup
-and restore, and compatibility-patch export. It checks deterministic outputs,
+layout through config discovery, scan, sort, ledger, verify, apply with a backup
+(restored by the test), and compatibility-patch export. It checks deterministic outputs,
 case-sensitive config names and preservation of unrelated files; no real game
 is launched. Its `apply --force` bypasses only the host process probe, whose
 refusal is tested separately with a fake probe.

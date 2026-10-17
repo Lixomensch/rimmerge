@@ -150,7 +150,10 @@ mod tests {
             .expect("an applied order launches");
 
         assert_eq!(kind, LaunchRouteKind::Steam);
-        assert_eq!(use_case.launcher.launched(), vec![LaunchRoute::Steam]);
+        assert_eq!(
+            use_case.launcher.launched(),
+            vec![LaunchRoute::Steam(crate::ports::SteamClient::SystemDefault)]
+        );
     }
 
     #[test]

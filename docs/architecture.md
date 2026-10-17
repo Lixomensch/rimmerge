@@ -66,9 +66,9 @@ interface apps.
   generated, typed DTOs (`ts-rs` — see below).
 
 The desktop composition root is platform-neutral. Tauri uses WebView2 on
-Windows and WebKitGTK/GTK on Linux; platform-specific game executable
-selection and process names live in `rim-io`, not in the Vue interface or
-the `rim-session` use cases.
+Windows and WebKitGTK/GTK on Linux. The executable-name enum is part of the
+`rim-session::ports` contract; platform-specific executable selection,
+launching and process detection live in `rim-io`.
 
 ## Where to add what
 

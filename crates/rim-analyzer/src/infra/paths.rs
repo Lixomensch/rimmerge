@@ -67,11 +67,18 @@ pub fn expansion_defs_path(game_dir: &Path) -> PathBuf {
         .join("ExpansionDefs.xml")
 }
 
-/// `<game_dir>/../../workshop/content/294100`, i.e. the sibling
-/// `workshop/content/294100` folder two levels up from
-/// `steamapps/common/RimWorld`.
+/// The owning Steam library's `workshop/content/294100` directory on Linux,
+/// retaining game/library links. Without verified ownership, preserves the
+/// lexical `<game_dir>/../../workshop/content/294100` default.
 #[must_use]
 pub fn default_workshop_dir(game_dir: &Path) -> PathBuf {
+    #[cfg(target_os = "linux")]
+    if let Ok(Some(install)) = steam_install_for_game(game_dir) {
+        return install
+            .steamapps_dir
+            .join("workshop/content")
+            .join(RIMWORLD_STEAM_APP_ID);
+    }
     game_dir
         .parent()
         .and_then(Path::parent)
@@ -107,7 +114,8 @@ pub fn default_mods_config_path() -> Result<PathBuf> {
 }
 
 /// The native Unity config under an absolute `$XDG_CONFIG_HOME`, or
-/// `$HOME/.config`. This context-free helper never selects a Proton prefix.
+/// `$HOME/.config` when HOME is absolute. This context-free helper never
+/// selects a Proton prefix.
 #[cfg(not(windows))]
 pub fn default_mods_config_path() -> Result<PathBuf> {
     native_mods_config_path(path_var("HOME").as_deref(), path_var("XDG_CONFIG_HOME"))
@@ -136,14 +144,106 @@ pub fn mods_config_path_for_install(game_dir: &Path) -> Result<PathBuf> {
 }
 
 #[cfg(not(windows))]
+fn absolute_home(home: Option<&Path>) -> Option<&Path> {
+    home.filter(|path| path.is_absolute())
+}
+
+/// The Linux Steam client that owns a registered game installation.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinuxSteamClient {
+    /// Steam installed directly on the host.
+    Native,
+    /// Steam installed as com.valvesoftware.Steam.
+    Flatpak,
+}
+
+/// Verified ownership and library location, before resolving game-folder links.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SteamInstallContext {
+    /// The client whose library records identify this installation.
+    pub client: LinuxSteamClient,
+    /// This installation's steamapps directory, including its Proton prefix.
+    pub steamapps_dir: PathBuf,
+}
+
+/// Identifies a Linux installation through its given path and resolved target.
+///
+/// # Errors
+/// Returns an error for an inaccessible install or conflicting client/library records.
+#[cfg(target_os = "linux")]
+pub fn steam_install_for_game(game_dir: &Path) -> Result<Option<SteamInstallContext>> {
+    let resolved = game_dir
+        .canonicalize()
+        .context("selected install cannot be resolved")?;
+    steam_install_context_from(
+        game_dir,
+        &resolved,
+        path_var("HOME").as_deref(),
+        &default_steam_roots(),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn steam_install_context_from(
+    given: &Path,
+    resolved: &Path,
+    home: Option<&Path>,
+    steam_roots: &[PathBuf],
+) -> Result<Option<SteamInstallContext>> {
+    let flatpak_root = absolute_home(home)
+        .map(|home| home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+    let mut candidates = vec![given];
+    if given != resolved {
+        candidates.push(resolved);
+    }
+    let mut found: Option<SteamInstallContext> = None;
+    for candidate in candidates {
+        for root in steam_roots {
+            if !is_steam_managed_install_under(candidate, std::slice::from_ref(root)) {
+                continue;
+            }
+            // A shared physical root must not erase the owning client's identity.
+            let client = if flatpak_root.as_ref().is_some_and(|flatpak| root == flatpak) {
+                LinuxSteamClient::Flatpak
+            } else {
+                LinuxSteamClient::Native
+            };
+            // Ownership above verified the steamapps/common/install shape.
+            let steamapps_dir = candidate
+                .parent()
+                .and_then(Path::parent)
+                .context("selected install has no Steam library")?
+                .to_path_buf();
+            if let Some(previous) = &found {
+                if previous.client != client
+                    || library_key(&previous.steamapps_dir) != library_key(&steamapps_dir)
+                {
+                    anyhow::bail!(
+                        "conflicting Steam client or library records; select paths explicitly"
+                    );
+                }
+            } else {
+                found = Some(SteamInstallContext {
+                    client,
+                    steamapps_dir,
+                });
+            }
+        }
+    }
+    Ok(found)
+}
+
+#[cfg(not(windows))]
 fn native_mods_config_path(
     home: Option<&Path>,
     xdg_config_home: Option<PathBuf>,
 ) -> Result<PathBuf> {
     let base = xdg_config_home
         .filter(|path| path.is_absolute())
-        .or_else(|| home.map(|home| home.join(".config")))
-        .context("HOME or an absolute XDG_CONFIG_HOME is required")?;
+        .or_else(|| absolute_home(home).map(|home| home.join(".config")))
+        .context("an absolute HOME or XDG_CONFIG_HOME is required")?;
     Ok(base.join("unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"))
 }
 
@@ -154,6 +254,8 @@ fn mods_config_path_for_install_from(
     xdg_config_home: Option<PathBuf>,
     steam_roots: &[PathBuf],
 ) -> Result<PathBuf> {
+    let home = absolute_home(home);
+    let given = game_dir;
     let game_dir = game_dir
         .canonicalize()
         .context("selected install cannot be resolved; select ModsConfig.xml explicitly")?;
@@ -166,51 +268,30 @@ fn mods_config_path_for_install_from(
     if !is_game_dir(&game_dir) || native == windows {
         anyhow::bail!("unknown or mixed game layout; select ModsConfig.xml explicitly");
     }
-    let roots: Vec<_> = steam_roots
-        .iter()
-        .filter(|root| is_steam_managed_install_under(&game_dir, std::slice::from_ref(root)))
-        .collect();
-    if roots.is_empty()
-        && game_dir
-            .parent()
-            .is_some_and(|parent| parent.ends_with("steamapps/common"))
+    let install = steam_install_context_from(given, &game_dir, home, steam_roots)?;
+    if install.is_none()
+        && [given, game_dir.as_path()].iter().any(|path| {
+            path.parent()
+                .is_some_and(|parent| parent.ends_with("steamapps/common"))
+        })
     {
         anyhow::bail!(
             "Steam install ownership cannot be verified; select ModsConfig.xml explicitly"
         );
     }
     let config = if windows {
-        if roots.is_empty() {
-            anyhow::bail!(
-                "no registered Steam library for this Proton install; select ModsConfig.xml explicitly"
-            );
-        }
-        // Steam ownership above validates this exact steamapps/common/install shape.
-        let steamapps = game_dir
-            .parent()
-            .and_then(Path::parent)
-            .context("selected install has no Steam library")?;
-        steamapps.join("compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml")
+        let install = install.as_ref().context(
+            "no registered Steam library for this Proton install; select ModsConfig.xml explicitly",
+        )?;
+        install.steamapps_dir.join("compatdata").join(RIMWORLD_STEAM_APP_ID).join("pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml")
+    } else if install
+        .as_ref()
+        .is_some_and(|install| install.client == LinuxSteamClient::Flatpak)
+    {
+        home.context("HOME is required for the Flatpak Steam config")?
+            .join(".var/app/com.valvesoftware.Steam/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml")
     } else {
-        let flatpak_root =
-            home.map(|home| home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
-        let is_flatpak = |root: &&PathBuf| {
-            flatpak_root
-                .as_ref()
-                .is_some_and(|flatpak| library_key(root) == library_key(flatpak))
-        };
-        let flatpak = roots.iter().any(is_flatpak);
-        if flatpak && roots.iter().any(|root| !is_flatpak(root)) {
-            anyhow::bail!(
-                "install is shared by native and Flatpak Steam; select ModsConfig.xml explicitly"
-            );
-        }
-        if flatpak {
-            home.context("HOME is required for the Flatpak Steam config")?
-                .join(".var/app/com.valvesoftware.Steam/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml")
-        } else {
-            native_mods_config_path(home, xdg_config_home)?
-        }
+        native_mods_config_path(home, xdg_config_home)?
     };
     if !config.is_file() {
         anyhow::bail!(
@@ -302,7 +383,10 @@ fn default_profile_base_dir_from(
             xdg_data_home
                 .filter(|path| path.is_absolute())
                 .map(|xdg| xdg.join("rimmerge"))
-                .or_else(|| home.map(|home| home.join(".local").join("share").join("rimmerge")))
+                .or_else(|| {
+                    absolute_home(home.as_deref())
+                        .map(|home| home.join(".local").join("share").join("rimmerge"))
+                })
         }
     })
 }
@@ -348,7 +432,7 @@ fn default_rimsort_dbs_dir_from(
             .filter(|path| path.is_absolute())
             .map(|xdg| xdg.join("RimSort").join("dbs"))
             .or_else(|| {
-                home.map(|home| {
+                absolute_home(home.as_deref()).map(|home| {
                     home.join(".local")
                         .join("share")
                         .join("RimSort")
@@ -424,7 +508,14 @@ const STEAM_LIBRARY_LIST_MAX_BYTES: u64 = 1024 * 1024;
 /// or unparseable file means `false`, never an error.
 #[must_use]
 pub fn is_steam_managed_install(game_dir: &Path) -> bool {
-    is_steam_managed_install_under(game_dir, &default_steam_roots())
+    #[cfg(target_os = "linux")]
+    {
+        steam_install_for_game(game_dir).is_ok_and(|install| install.is_some())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        is_steam_managed_install_under(game_dir, &default_steam_roots())
+    }
 }
 
 /// [`is_steam_managed_install`] against an explicit list of Steam roots, so
@@ -690,10 +781,9 @@ fn platform_candidates() -> Vec<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn default_steam_roots() -> Vec<PathBuf> {
-    std::env::var_os("HOME")
+    absolute_home(path_var("HOME").as_deref())
         .map(|home| {
-            PathBuf::from(home)
-                .join("Library")
+            home.join("Library")
                 .join("Application Support")
                 .join("Steam")
         })
@@ -719,7 +809,12 @@ fn platform_candidates() -> Vec<PathBuf> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn default_steam_roots() -> Vec<PathBuf> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+    steam_roots_from_home(path_var("HOME").as_deref())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn steam_roots_from_home(home: Option<&Path>) -> Vec<PathBuf> {
+    let Some(home) = absolute_home(home) else {
         return Vec::new();
     };
     vec![
@@ -1039,6 +1134,54 @@ mod tests {
                 None
             ),
             None
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn invalid_home_never_produces_relative_defaults() {
+        let xdg = PathBuf::from("/synthetic-xdg");
+        for home in [None, Some(""), Some("."), Some("relative/home")] {
+            let home = home.map(PathBuf::from);
+            assert!(native_mods_config_path(home.as_deref(), None).is_err());
+            assert_eq!(
+                default_profile_base_dir_from(None, None, home.clone(), None),
+                None
+            );
+            assert_eq!(default_rimsort_dbs_dir_from(None, home.clone(), None), None);
+            assert_eq!(
+                native_mods_config_path(home.as_deref(), Some(xdg.clone())).expect("XDG config"),
+                xdg.join("unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml")
+            );
+            assert_eq!(
+                default_profile_base_dir_from(None, Some(xdg.clone()), home.clone(), None),
+                Some(xdg.join("rimmerge"))
+            );
+            assert_eq!(
+                default_rimsort_dbs_dir_from(Some(xdg.clone()), home.clone(), None),
+                Some(xdg.join("RimSort/dbs"))
+            );
+            assert_eq!(
+                default_profile_base_dir_from(Some(PathBuf::from("explicit")), None, home, None),
+                Some(PathBuf::from("explicit"))
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn steam_roots_require_an_absolute_home() {
+        for home in [None, Some(""), Some("."), Some("relative/home")] {
+            assert!(steam_roots_from_home(home.map(Path::new)).is_empty());
+        }
+        let home = Path::new("/synthetic-home");
+        assert_eq!(
+            steam_roots_from_home(Some(home)),
+            vec![
+                home.join(".steam/steam"),
+                home.join(".local/share/Steam"),
+                home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"),
+            ]
         );
     }
 
@@ -1436,6 +1579,161 @@ mod tests {
         );
     }
     #[cfg(target_os = "linux")]
+    #[test]
+    fn steam_context_keeps_linked_flatpak_library_and_rejects_conflicting_targets() {
+        let scratch = Scratch::new("linked-context");
+        let home = scratch.path().join("home");
+        let steam = home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam");
+        let library = scratch.path().join("secondary");
+        write_library_list(&steam, &libraryfolders_vdf(&[display(&library)]));
+        let game = place_game(&library, "RimWorld", Some(&manifest_naming("RimWorld")));
+        std::fs::create_dir_all(game.join("Data/Core")).expect("core");
+        std::fs::create_dir_all(game.join("RimWorldLinux_Data")).expect("native runtime");
+        std::fs::write(game.join("Version.txt"), "1.6.0").expect("version");
+        let flatpak = home.join(".var/app/com.valvesoftware.Steam/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        write_config(&native_mods_config_path(Some(&home), None).expect("native decoy"));
+        write_config(&flatpak);
+        let outside_alias = scratch.path().join("outside-alias");
+        std::os::unix::fs::symlink(&game, &outside_alias).expect("outside alias");
+        let roots = std::slice::from_ref(&steam);
+        let expected_library = library.join("steamapps");
+        let context = steam_install_context_from(&outside_alias, &game, Some(&home), roots)
+            .expect("context")
+            .expect("Steam");
+        assert_eq!(context.client, LinuxSteamClient::Flatpak);
+        assert_eq!(context.steamapps_dir, expected_library);
+        assert_eq!(
+            mods_config_path_for_install_from(&outside_alias, Some(&home), None, roots)
+                .expect("outside alias config"),
+            flatpak
+        );
+        let external = scratch.path().join("external-game");
+        std::fs::rename(&game, &external).expect("move runtime outside Steam");
+        std::os::unix::fs::symlink(&external, &game).expect("Steam game link");
+        let context = steam_install_context_from(&game, &external, Some(&home), roots)
+            .expect("linked context")
+            .expect("Steam");
+        assert_eq!(context.steamapps_dir, expected_library);
+        assert_eq!(
+            mods_config_path_for_install_from(&game, Some(&home), None, roots)
+                .expect("linked config"),
+            flatpak
+        );
+        assert_eq!(
+            context
+                .steamapps_dir
+                .join("workshop/content")
+                .join(RIMWORLD_STEAM_APP_ID),
+            library.join("steamapps/workshop/content/294100")
+        );
+        let library_alias = scratch.path().join("library-alias");
+        std::os::unix::fs::symlink(&library, &library_alias).expect("library link");
+        let through_library = library_alias.join("steamapps/common/RimWorld");
+        let context = steam_install_context_from(&through_library, &external, Some(&home), roots)
+            .expect("linked library context")
+            .expect("Steam");
+        assert_eq!(
+            context
+                .steamapps_dir
+                .canonicalize()
+                .expect("library target"),
+            expected_library.canonicalize().expect("registered library")
+        );
+        assert_eq!(
+            mods_config_path_for_install_from(&through_library, Some(&home), None, roots)
+                .expect("linked library config"),
+            flatpak
+        );
+        std::fs::remove_dir(external.join("RimWorldLinux_Data")).expect("remove Linux runtime");
+        std::fs::create_dir(external.join("RimWorldWin64_Data")).expect("Proton runtime");
+        let proton = library.join("steamapps/compatdata/294100/pfx/drive_c/users/steamuser/AppData/LocalLow/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml");
+        write_config(&proton);
+        assert_eq!(
+            mods_config_path_for_install_from(&game, Some(&home), None, roots)
+                .expect("linked Proton prefix"),
+            proton
+        );
+        let native = home.join(".local/share/Steam");
+        write_library_list(&native, &libraryfolders_vdf(&[]));
+        let other = place_game(&native, "RimWorld", Some(&manifest_naming("RimWorld")));
+        std::fs::remove_file(&game).expect("remove game link");
+        std::os::unix::fs::symlink(&other, &game).expect("conflicting target");
+        std::fs::create_dir_all(other.join("Data/Core")).expect("other core");
+        std::fs::create_dir(other.join("RimWorldLinux_Data")).expect("other native runtime");
+        std::fs::write(other.join("Version.txt"), "1.6.0").expect("other version");
+        let roots = [steam, native];
+        assert!(steam_install_context_from(&game, &other, Some(&home), &roots).is_err());
+        let error = mods_config_path_for_install_from(&game, Some(&home), None, &roots)
+            .expect_err("conflict must not select the native decoy");
+        assert!(error.to_string().contains("conflicting Steam"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn shared_native_and_flatpak_roots_require_explicit_context() {
+        for native_is_link in [false, true] {
+            let scratch = Scratch::new(if native_is_link {
+                "native-root-link"
+            } else {
+                "flatpak-root-link"
+            });
+            let home = scratch.path().join("home");
+            let native = home.join(".local/share/Steam");
+            let flatpak = home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam");
+            let (physical, alias) = if native_is_link {
+                (&flatpak, &native)
+            } else {
+                (&native, &flatpak)
+            };
+            write_library_list(physical, &libraryfolders_vdf(&[]));
+            let game = place_game(physical, "RimWorld", Some(&manifest_naming("RimWorld")));
+            std::fs::create_dir_all(game.join("Data/Core")).expect("core");
+            std::fs::create_dir(game.join("RimWorldLinux_Data")).expect("native runtime");
+            std::fs::write(game.join("Version.txt"), "1.6.0").expect("version");
+            std::fs::create_dir_all(alias.parent().expect("root parent")).expect("parent");
+            std::os::unix::fs::symlink(physical, alias).expect("shared Steam root");
+            write_config(&native_mods_config_path(Some(&home), None).expect("native config"));
+            write_config(&home.join(".var/app/com.valvesoftware.Steam/.config/unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Config/ModsConfig.xml"));
+            let roots = steam_roots_from_home(Some(&home));
+            for root in [&native, &flatpak] {
+                let given = root.join("steamapps/common/RimWorld");
+                let resolved = given.canonicalize().expect("resolved game");
+                let error = steam_install_context_from(&given, &resolved, Some(&home), &roots)
+                    .expect_err("shared roots must not choose a client");
+                assert!(error.to_string().contains("conflicting Steam"));
+                let error = mods_config_path_for_install_from(&given, Some(&home), None, &roots)
+                    .expect_err("shared roots must not choose either existing config");
+                assert!(error.to_string().contains("conflicting Steam"));
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn separate_native_and_flatpak_clients_keep_their_own_routes() {
+        let scratch = Scratch::new("two-steam-clients");
+        let home = scratch.path().join("home");
+        let native = home.join(".local/share/Steam");
+        let flatpak = home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam");
+        let roots = [native.clone(), flatpak.clone()];
+        for (root, client) in [
+            (&native, LinuxSteamClient::Native),
+            (&flatpak, LinuxSteamClient::Flatpak),
+        ] {
+            write_library_list(root, &libraryfolders_vdf(&[]));
+            let game = place_game(root, "RimWorld", Some(&manifest_naming("RimWorld")));
+            let context = steam_install_context_from(&game, &game, Some(&home), &roots)
+                .expect("unambiguous")
+                .expect("Steam");
+            assert_eq!(context.client, client);
+            assert_eq!(context.steamapps_dir, root.join("steamapps"));
+        }
+        write_library_list(&flatpak, &libraryfolders_vdf(&[display(&native)]));
+        let shared = native.join("steamapps/common/RimWorld");
+        assert!(steam_install_context_from(&shared, &shared, Some(&home), &roots).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_config(path: &Path) {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("config dir");
         std::fs::write(path, "<ModsConfigData/>").expect("synthetic config");
@@ -1464,6 +1762,15 @@ mod tests {
                 .expect("native XDG"),
             expected
         );
+        for home in [None, Some(""), Some("."), Some("relative/home")] {
+            let home = home.map(Path::new);
+            assert!(mods_config_path_for_install_from(&game, home, None, &[]).is_err());
+            assert_eq!(
+                mods_config_path_for_install_from(&game, home, Some(xdg.clone()), &[])
+                    .expect("absolute XDG config with invalid HOME"),
+                expected
+            );
+        }
         for xdg in [None, Some(PathBuf::new()), Some(PathBuf::from("relative"))] {
             assert_eq!(
                 mods_config_path_for_install_from(&game, Some(&home), xdg, &[])
