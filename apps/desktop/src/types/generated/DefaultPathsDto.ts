@@ -10,9 +10,9 @@ import type { DefaultPathsWarningDto } from "./DefaultPathsWarningDto";
  *
  * Every field is optional and `error`/`errorCode` carry the reason when
  * the ladder ran out of rungs, rather than the command failing
- * outright: the setup page is exactly where a user with no detectable
- * install needs to land, and it needs to render its (empty) form *and*
- * tell them where was looked. `error` is the full
+ * outright. When config discovery fails, the game/workshop paths and an
+ * explicit profile remain available alongside the error. No profile is
+ * derived without a resolved config. `error` is the full
  * [`rim_io::PathResolutionError`] text, which names every candidate on
  * its own line; `errorCode`/`warningCode` are its localizable,
  * structured counterparts (kept alongside the strings for one release
@@ -33,7 +33,7 @@ workshopDir: string | null,
  */
 modsConfig: string | null, 
 /**
- * The profile directory `mods_config` hashes to.
+ * An explicit profile directory, or the profile derived from a resolved config.
  */
 profileDir: string | null, 
 /**
@@ -51,7 +51,7 @@ warning: string | null,
  */
 warningCode: DefaultPathsWarningDto | null, 
 /**
- * Why nothing could be resolved, including every candidate location
+ * Why resolution was incomplete, including every candidate location
  * that was looked at. `None` when resolution succeeded.
  */
 error: string | null, 

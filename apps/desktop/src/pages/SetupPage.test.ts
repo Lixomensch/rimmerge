@@ -326,6 +326,37 @@ describe("SetupPage", () => {
     expect(wrapper.get('[data-testid="load-project-button"]').attributes("disabled")).toBeDefined();
   });
 
+  it("keeps detected folders when config discovery fails without overwriting user edits", async () => {
+    installMockIpc({
+      get_default_paths: {
+        ...defaultsFixture,
+        modsConfig: null,
+        profileDir: null,
+        error: "Config for the selected install is absent",
+        errorCode: { kind: "modsConfigNotFound", reason: "Config is absent" },
+      },
+    });
+    const { wrapper } = mountSetupPage();
+    const gameInput = wrapper.get('[data-testid="game-dir-input"]');
+    await gameInput.setValue("/custom/game");
+    await vi.waitFor(() => {
+      expect(
+        (wrapper.get('[data-testid="workshop-dir-input"]').element as HTMLInputElement).value,
+      ).toBe(defaultsFixture.workshopDir);
+    });
+    expect((gameInput.element as HTMLInputElement).value).toBe("/custom/game");
+    expect(
+      (wrapper.get('[data-testid="mods-config-input"]').element as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (wrapper.get('[data-testid="profile-dir-input"]').element as HTMLInputElement).value,
+    ).toBe("");
+    expect(wrapper.get('[data-testid="setup-detection-error"]').text()).toContain(
+      "Config for the selected install is absent",
+    );
+    expect(wrapper.get('[data-testid="load-project-button"]').attributes("disabled")).toBeDefined();
+  });
+
   it("shows the non-fatal warning beside the prefilled fields, without blocking Load", async () => {
     // A pinned or env-supplied install directory that isn't one: the
     // fields still fill in (the drive may just not be mounted yet) and

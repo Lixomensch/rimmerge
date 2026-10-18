@@ -95,7 +95,23 @@ pub enum PathResolutionError {
     ModsConfigNotFound {
         /// Why the default configuration could not be resolved.
         reason: String,
+        /// Paths resolved before config discovery failed, for setup diagnostics.
+        partial: Box<PartialProjectPaths>,
     },
+}
+
+/// Available paths when config discovery fails. No profile is derived without
+/// a resolved config, but an explicit profile override is retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartialProjectPaths {
+    /// The selected or detected install.
+    pub game_dir: PathBuf,
+    /// The selected or derived workshop location.
+    pub workshop_dir: PathBuf,
+    /// Only a caller-supplied profile directory.
+    pub profile_dir: Option<PathBuf>,
+    /// A non-fatal warning about the selected install.
+    pub warning: Option<String>,
 }
 
 fn format_candidates(candidates: &[PathBuf]) -> String {
@@ -240,7 +256,15 @@ fn resolve_with(
         Some(path) => path,
         None => environment
             .default_mods_config(&game_dir)
-            .map_err(|reason| PathResolutionError::ModsConfigNotFound { reason })?,
+            .map_err(|reason| PathResolutionError::ModsConfigNotFound {
+                reason,
+                partial: Box::new(PartialProjectPaths {
+                    game_dir: game_dir.clone(),
+                    workshop_dir: workshop_dir.clone(),
+                    profile_dir: overrides.profile_dir.clone(),
+                    warning: warning.clone(),
+                }),
+            })?,
     };
 
     let profile_dir = overrides
@@ -317,6 +341,43 @@ mod tests {
             self.installs.push(PathBuf::from(path));
             self
         }
+    }
+
+    #[test]
+    fn missing_config_preserves_resolved_paths_warning_and_explicit_profile() {
+        let base = tempfile::tempdir().expect("base");
+        let mut overrides = PathOverrides::new(base.path().to_path_buf());
+        overrides.game_dir = Some(PathBuf::from("selected-game"));
+        overrides.workshop_dir = Some(PathBuf::from("selected-workshop"));
+        let environment = FakeEnvironment::default();
+        for profile in [None, Some(PathBuf::from("explicit-profile"))] {
+            overrides.profile_dir = profile.clone();
+            let error = resolve_with(&overrides, &environment).expect_err("config is absent");
+            let PathResolutionError::ModsConfigNotFound { partial, .. } = error else {
+                panic!("expected config discovery error");
+            };
+            assert_eq!(partial.game_dir, PathBuf::from("selected-game"));
+            assert_eq!(partial.workshop_dir, PathBuf::from("selected-workshop"));
+            assert_eq!(partial.profile_dir, profile);
+            assert_eq!(
+                partial.warning,
+                Some(not_an_install_warning(Path::new("selected-game")))
+            );
+        }
+        let overrides = PathOverrides::new(base.path().to_path_buf());
+        let detected = FakeEnvironment::default().detecting("detected-game");
+        let error = resolve_with(&overrides, &detected).expect_err("config is absent");
+        let PathResolutionError::ModsConfigNotFound { partial, .. } = error else {
+            panic!("expected config discovery error");
+        };
+        assert_eq!(partial.game_dir, PathBuf::from("detected-game"));
+        assert_eq!(
+            partial.workshop_dir,
+            paths::default_workshop_dir(Path::new("detected-game"))
+        );
+        assert_eq!(partial.profile_dir, None);
+        assert_eq!(partial.warning, None);
+        assert_eq!(std::fs::read_dir(base.path()).expect("entries").count(), 0);
     }
 
     #[test]

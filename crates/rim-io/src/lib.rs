@@ -66,8 +66,8 @@ pub use profile::{
     ExportDirError, databases_dir, profile_dir, resolve_export_dir, resolve_user_dir,
 };
 pub use project_paths::{
-    GAME_DIR_VAR, MODS_CONFIG_VAR, PathOverrides, PathResolutionError, ResolvedPaths,
-    WORKSHOP_DIR_VAR, not_an_install_warning, resolve_project_paths,
+    GAME_DIR_VAR, MODS_CONFIG_VAR, PartialProjectPaths, PathOverrides, PathResolutionError,
+    ResolvedPaths, WORKSHOP_DIR_VAR, not_an_install_warning, resolve_project_paths,
 };
 pub use release_feed::GithubReleaseFeed;
 pub use rimsort::RimSortImporter;

@@ -262,7 +262,10 @@ fn mods_config_path_for_install_from(
     let native = game_dir.join("RimWorldLinux_Data").is_dir()
         || ["RimWorldLinux", "RimWorldLinux.x86_64"]
             .iter()
-            .any(|name| game_dir.join(name).is_file());
+            .any(|name| game_dir.join(name).is_file())
+        || ["RimWorld", "RimWorld.dll", "RimWorld.runtimeconfig.json"]
+            .iter()
+            .all(|name| game_dir.join(name).is_file());
     let windows = game_dir.join("RimWorldWin64_Data").is_dir()
         || game_dir.join("RimWorldWin64.exe").is_file();
     if !is_game_dir(&game_dir) || native == windows {
@@ -1737,6 +1740,44 @@ mod tests {
     fn write_config(path: &Path) {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("config dir");
         std::fs::write(path, "<ModsConfigData/>").expect("synthetic config");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn modern_native_layout_resolves_config_without_legacy_unity_files() {
+        let scratch = Scratch::new("modern-native-config");
+        let home = scratch.path().join("home");
+        let game = scratch.path().join("game");
+        std::fs::create_dir_all(game.join("Data/Core")).expect("core");
+        std::fs::write(game.join("Version.txt"), "1.7.0").expect("version");
+        let config = native_mods_config_path(Some(&home), None).expect("native config");
+        write_config(&config);
+        for name in ["RimWorld", "RimWorld.dll", "RimWorld.runtimeconfig.json"] {
+            std::fs::write(game.join(name), "synthetic runtime").expect("runtime file");
+        }
+        assert_eq!(
+            mods_config_path_for_install_from(&game, Some(&home), None, &[])
+                .expect("modern native config"),
+            config
+        );
+        let xdg = scratch.path().join("xdg");
+        let xdg_config = native_mods_config_path(None, Some(xdg.clone())).expect("XDG config");
+        write_config(&xdg_config);
+        assert_eq!(
+            mods_config_path_for_install_from(&game, Some(&home), Some(xdg), &[])
+                .expect("modern XDG config"),
+            xdg_config
+        );
+        std::fs::write(game.join("RimWorldWin64.exe"), "synthetic").expect("Windows runtime");
+        assert!(mods_config_path_for_install_from(&game, Some(&home), None, &[]).is_err());
+        std::fs::remove_file(game.join("RimWorldWin64.exe")).expect("remove Windows runtime");
+        std::fs::remove_file(game.join("RimWorld.runtimeconfig.json"))
+            .expect("remove runtime marker");
+        assert!(mods_config_path_for_install_from(&game, Some(&home), None, &[]).is_err());
+        std::fs::write(game.join("RimWorld.runtimeconfig.json"), "{}")
+            .expect("restore runtime marker");
+        std::fs::remove_file(config).expect("remove config");
+        assert!(mods_config_path_for_install_from(&game, Some(&home), None, &[]).is_err());
     }
 
     #[cfg(target_os = "linux")]
