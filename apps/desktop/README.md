@@ -9,10 +9,6 @@ the crate graph this app sits on top of, and
 [docs/desktop.md](../../docs/desktop.md) for a page-by-page walkthrough
 with screenshots.
 
-On Linux, install the WebKitGTK/Tauri development dependencies listed in
-[docs/install.md](../../docs/install.md) before the first build. See its Linux
-support boundary; native X11/Wayland dialogs require manual
-validation separately from the browser mock tier.
 
 ## Dev loop
 
@@ -105,9 +101,8 @@ bun run e2e:smoke
 It takes a few minutes (a full `cargo build` of `rimmerge-desktop` the
 first time) and needs a Windows desktop session with WebView2. Its current
 configuration uses WebView2 flags and CDP; it does not attach to Linux
-WebKitGTK. Linux needs a separate manual smoke with disposable fixtures
-(see [install.md](../../docs/install.md#linux-support-boundary)). CI runs
-the browser mock-IPC tier plus Vitest, which do not validate the native webview.
+WebKitGTK. For future Linux changes, repeat the relevant manual checks with
+disposable fixtures (see [install.md](../../docs/install.md#linux-support-boundary)).
 
 ## License
 

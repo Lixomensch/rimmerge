@@ -16,11 +16,22 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::domain::GameVersion;
+use crate::domain::{GamePlatform, GameVersion};
 
 /// The Steam app id for RimWorld — the `workshop/content/<id>` folder
 /// name, and the `steamapps` subfolder every Steam library shares.
 pub const RIMWORLD_STEAM_APP_ID: &str = "294100";
+
+/// The selected install's runtime platform, regardless of the host OS.
+/// As with [`unity_data_dir`], absent Linux data defaults to Windows/Proton.
+#[must_use]
+pub fn game_platform(game_dir: &Path) -> GamePlatform {
+    if game_dir.join("RimWorldLinux_Data").is_dir() {
+        GamePlatform::Linux
+    } else {
+        GamePlatform::Windows
+    }
+}
 
 /// The install's Unity data folder: `RimWorldLinux_Data` on native Linux,
 /// or `RimWorldWin64_Data` on Windows (and Proton/Wine installs on Linux).
@@ -29,11 +40,10 @@ pub const RIMWORLD_STEAM_APP_ID: &str = "294100";
 /// `RimWorldWin64_Data`.
 #[must_use]
 pub fn unity_data_dir(game_dir: &Path) -> PathBuf {
-    let linux = game_dir.join("RimWorldLinux_Data");
-    if linux.is_dir() {
-        return linux;
+    match game_platform(game_dir) {
+        GamePlatform::Linux => game_dir.join("RimWorldLinux_Data"),
+        GamePlatform::Windows => game_dir.join("RimWorldWin64_Data"),
     }
-    game_dir.join("RimWorldWin64_Data")
 }
 
 /// `<game_dir>/<unity_data>/Managed`: the game's own managed
