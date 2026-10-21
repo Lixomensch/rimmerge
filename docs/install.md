@@ -54,9 +54,7 @@ sudo apt install build-essential curl file libayatana-appindicator3-dev \
   libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev wget
 ```
 
-Native smoke validation in X11 and Wayland remains required before claiming
-session support. Run
-`bun run tauri dev` from `apps/desktop` in the session you want to validate;
+ Run `bun run tauri dev` from `apps/desktop` in the session you want to validate;
 the native folder/file dialogs use `tauri-plugin-dialog` and require the
 `dialog:allow-open` and `dialog:allow-save` capabilities already committed
 in `src-tauri/capabilities/default.json`.
@@ -228,13 +226,6 @@ Rimmerge's own profile data uses an absolute XDG_DATA_HOME, otherwise
 | Target | Initial packaging baseline | Formats |
 | --- | --- | --- |
 | Linux GNU x86_64 / amd64 | Ubuntu 24.04 LTS | Desktop + CLI portable tarball, CLI tarball, `.deb` |
-
-Release builds use Ubuntu 24.04, the oldest supported packaging baseline.
-Other distributions, older glibc versions and other architectures are not
-promised. Compatibility still requires a native runtime smoke on the target
-system; browser mock tests do not validate WebKitGTK, file dialogs or handlers.
-X11 and Wayland smoke evidence is pending; neither session has been declared
-validated by the Linux fixture tests alone.
 
 The `.deb` declares WebKitGTK 4.1 and GTK dependencies. The desktop portable
 tarball requires compatible system libraries. The CLI can also be downloaded

@@ -241,37 +241,11 @@ pub async fn get_default_paths() -> DefaultPathsDto {
                 error_code: None,
             }
         }
-        Err(error) => defaults_with_error(&error),
-    }
-}
-
-/// Keeps independently resolved fields available while the user fixes config discovery.
-fn defaults_with_error(error: &rim_io::PathResolutionError) -> DefaultPathsDto {
-    let partial = match error {
-        rim_io::PathResolutionError::ModsConfigNotFound { partial, .. } => Some(partial),
-        rim_io::PathResolutionError::GameDirNotFound { .. } => None,
-    };
-    DefaultPathsDto {
-        game_dir: partial.map(|paths| paths.game_dir.display().to_string()),
-        workshop_dir: partial.map(|paths| paths.workshop_dir.display().to_string()),
-        mods_config: None,
-        profile_dir: partial.and_then(|paths| {
-            paths
-                .profile_dir
-                .as_ref()
-                .map(|path| path.display().to_string())
-        }),
-        warning: partial.and_then(|paths| paths.warning.clone()),
-        warning_code: partial.and_then(|paths| {
-            paths
-                .warning
-                .as_ref()
-                .map(|_| DefaultPathsWarningDto::NotAnInstall {
-                    game_dir: paths.game_dir.display().to_string(),
-                })
-        }),
-        error: Some(error.to_string()),
-        error_code: Some(path_resolution_error_to_dto(error)),
+        Err(error) => DefaultPathsDto {
+            error_code: Some(path_resolution_error_to_dto(&error)),
+            error: Some(error.to_string()),
+            ..empty
+        },
     }
 }
 
@@ -290,7 +264,7 @@ fn path_resolution_error_to_dto(error: &rim_io::PathResolutionError) -> DefaultP
                     .collect(),
             }
         }
-        rim_io::PathResolutionError::ModsConfigNotFound { reason, .. } => {
+        rim_io::PathResolutionError::ModsConfigNotFound { reason } => {
             DefaultPathsErrorDto::ModsConfigNotFound {
                 reason: reason.clone(),
             }
@@ -598,12 +572,6 @@ mod tests {
     fn path_resolution_error_to_dto_carries_the_reason() {
         let error = rim_io::PathResolutionError::ModsConfigNotFound {
             reason: "%USERPROFILE% is not set".to_string(),
-            partial: Box::new(rim_io::PartialProjectPaths {
-                game_dir: PathBuf::from("game"),
-                workshop_dir: PathBuf::from("workshop"),
-                profile_dir: None,
-                warning: None,
-            }),
         };
 
         let dto = path_resolution_error_to_dto(&error);
@@ -614,45 +582,5 @@ mod tests {
                 reason: "%USERPROFILE% is not set".to_string(),
             }
         );
-    }
-
-    #[test]
-    fn default_paths_preserve_available_fields_when_config_discovery_fails() {
-        for profile in [None, Some(PathBuf::from("explicit-profile"))] {
-            for warning in [None, Some("install is unavailable".to_string())] {
-                let error = rim_io::PathResolutionError::ModsConfigNotFound {
-                    reason: "config is absent".to_string(),
-                    partial: Box::new(rim_io::PartialProjectPaths {
-                        game_dir: PathBuf::from("game"),
-                        workshop_dir: PathBuf::from("workshop"),
-                        profile_dir: profile.clone(),
-                        warning: warning.clone(),
-                    }),
-                };
-                let dto = defaults_with_error(&error);
-                assert_eq!(dto.game_dir.as_deref(), Some("game"));
-                assert_eq!(dto.workshop_dir.as_deref(), Some("workshop"));
-                assert_eq!(dto.mods_config, None);
-                assert_eq!(
-                    dto.profile_dir,
-                    profile.as_ref().map(|path| path.display().to_string())
-                );
-                assert_eq!(dto.warning, warning);
-                assert_eq!(dto.warning_code.is_some(), dto.warning.is_some());
-                assert_eq!(dto.error, Some(error.to_string()));
-                assert!(matches!(
-                    dto.error_code,
-                    Some(DefaultPathsErrorDto::ModsConfigNotFound { .. })
-                ));
-            }
-        }
-        let dto = defaults_with_error(&rim_io::PathResolutionError::GameDirNotFound {
-            candidates: vec![PathBuf::from("missing-game")],
-        });
-        assert_eq!(dto.game_dir, None);
-        assert_eq!(dto.workshop_dir, None);
-        assert_eq!(dto.mods_config, None);
-        assert_eq!(dto.profile_dir, None);
-        assert!(dto.error.is_some());
     }
 }

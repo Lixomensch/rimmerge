@@ -105,9 +105,9 @@ pub enum DefaultPathsErrorDto {
 ///
 /// Every field is optional and `error`/`errorCode` carry the reason when
 /// the ladder ran out of rungs, rather than the command failing
-/// outright. When config discovery fails, the game/workshop paths and an
-/// explicit profile remain available alongside the error. No profile is
-/// derived without a resolved config. `error` is the full
+/// outright: the setup page is exactly where a user with no detectable
+/// install needs to land, and it needs to render its (empty) form *and*
+/// tell them where was looked. `error` is the full
 /// [`rim_io::PathResolutionError`] text, which names every candidate on
 /// its own line; `errorCode`/`warningCode` are its localizable,
 /// structured counterparts (kept alongside the strings for one release
@@ -123,7 +123,7 @@ pub struct DefaultPathsDto {
     pub workshop_dir: Option<String>,
     /// The resolved `ModsConfig.xml` path.
     pub mods_config: Option<String>,
-    /// An explicit profile directory, or the profile derived from a resolved config.
+    /// The profile directory `mods_config` hashes to.
     pub profile_dir: Option<String>,
     /// A **non-fatal** complaint about what *was* resolved — today, an
     /// explicit field, `RIMMERGE_GAME_DIR`, or a pinned `config.json`
@@ -135,7 +135,7 @@ pub struct DefaultPathsDto {
     /// [`DefaultPathsWarningDto`] version of `warning`. `Some` exactly
     /// when `warning` is.
     pub warning_code: Option<DefaultPathsWarningDto>,
-    /// Why resolution was incomplete, including every candidate location
+    /// Why nothing could be resolved, including every candidate location
     /// that was looked at. `None` when resolution succeeded.
     pub error: Option<String>,
     /// [`DefaultPathsErrorDto`] version of `error`. `Some` exactly when

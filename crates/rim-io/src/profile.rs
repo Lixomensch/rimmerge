@@ -15,7 +15,7 @@ const EXTENDED_PREFIX: &str = r"\\?\";
 
 /// Canonicalizes an existing config path before hashing. Windows also strips
 /// the extended prefix, normalizes separators and folds case. Unix preserves
-/// the original bytes, case and literal backslashes.
+/// the original bytes, case and literal backslashes. UTF-8 path IDs stay unchanged.
 /// If the file does not exist, its original spelling is used.
 fn normalize(path: &Path) -> Vec<u8> {
     let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
@@ -33,32 +33,11 @@ fn normalize(path: &Path) -> Vec<u8> {
 
 /// `<base>/profiles/<first 12 hex chars of sha256(normalized config path)>/`.
 /// Stable for aliases of the same existing file. Case/separator variants are
-/// equivalent only on Windows. On Unix an existing legacy case-folded profile
-/// is reused when the byte-preserving profile does not exist. No data is moved.
+/// equivalent only on Windows; Unix paths remain distinct.
 #[must_use]
 pub fn profile_dir(base: &Path, mods_config: &Path) -> PathBuf {
-    let current = hashed_profile_dir(base, &normalize(mods_config));
-    #[cfg(unix)]
-    if !current.exists() {
-        let resolved = mods_config
-            .canonicalize()
-            .unwrap_or_else(|_| mods_config.to_path_buf());
-        // Lossy legacy keys must never conflate distinct non-UTF-8 config paths.
-        if let Some(text) = resolved.to_str() {
-            let stripped = text.strip_prefix(EXTENDED_PREFIX).unwrap_or(text);
-            let legacy =
-                hashed_profile_dir(base, stripped.replace('\\', "/").to_lowercase().as_bytes());
-            if legacy.is_dir() {
-                return legacy;
-            }
-        }
-    }
-    current
-}
-
-fn hashed_profile_dir(base: &Path, key: &[u8]) -> PathBuf {
     let mut hasher = Sha256::new();
-    hasher.update(key);
+    hasher.update(normalize(mods_config));
     let digest = hasher.finalize();
     let hex: String = digest
         .iter()
@@ -196,66 +175,6 @@ mod tests {
             profile_dir(base, Path::new("a/ModsConfig.xml")),
             profile_dir(base, Path::new("b/ModsConfig.xml"))
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn reuses_existing_legacy_profile_without_moving_data_and_prefers_current_profile() {
-        let scratch = tempdir().expect("scratch");
-        let config = scratch.path().join("ModsConfig.xml");
-        std::fs::write(&config, b"<ModsConfigData/>").expect("config");
-        let base = scratch.path().join("base");
-        let current = profile_dir(&base, &config);
-        let text = config
-            .canonicalize()
-            .expect("canonical config")
-            .to_str()
-            .expect("UTF-8")
-            .replace('\\', "/")
-            .to_lowercase();
-        let legacy = hashed_profile_dir(&base, text.as_bytes());
-        assert_ne!(current, legacy);
-        std::fs::create_dir_all(&legacy).expect("legacy profile");
-        std::fs::write(legacy.join("decisions.json"), b"legacy decisions").expect("decisions");
-        assert_eq!(profile_dir(&base, &config), legacy);
-        assert!(!current.exists());
-        assert_eq!(
-            std::fs::read(legacy.join("decisions.json")).expect("unchanged data"),
-            b"legacy decisions"
-        );
-        let alias = scratch.path().join("config-alias");
-        std::os::unix::fs::symlink(&config, &alias).expect("config alias");
-        assert_eq!(profile_dir(&base, &alias), legacy);
-        std::fs::create_dir_all(&current).expect("current profile");
-        assert_eq!(profile_dir(&base, &config), current);
-        assert_eq!(
-            std::fs::read(legacy.join("decisions.json")).expect("legacy still intact"),
-            b"legacy decisions"
-        );
-        let other = scratch.path().join("OtherConfig.xml");
-        std::fs::write(&other, b"<ModsConfigData/>").expect("other config");
-        assert_ne!(profile_dir(&base, &other), legacy);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn non_utf8_configs_never_reuse_a_lossy_legacy_profile() {
-        use std::os::unix::ffi::OsStringExt;
-        let scratch = tempdir().expect("scratch");
-        let config = scratch
-            .path()
-            .join(std::ffi::OsString::from_vec(vec![0xff]));
-        std::fs::write(&config, b"<ModsConfigData/>").expect("config");
-        let base = scratch.path().join("base");
-        let lossy = config
-            .canonicalize()
-            .expect("config path")
-            .to_string_lossy()
-            .replace('\\', "/")
-            .to_lowercase();
-        let legacy = hashed_profile_dir(&base, lossy.as_bytes());
-        std::fs::create_dir_all(&legacy).expect("lossy legacy directory");
-        assert_ne!(profile_dir(&base, &config), legacy);
     }
 
     #[test]
